@@ -121,7 +121,7 @@ export const homeConfig: HomeConfig = {
       "subhead": "Solework's 3D design studio lets you dial in color, silhouette, and fit \u2014 then our AI validates the design before you pay, so your custom pair arrives wearable, not just printable.",
       "primaryCta": {
         "label": "Open the Design Studio",
-        "href": "/studio"
+        "href": "/shop"
       },
       "secondaryCta": {
         "label": "Shop Best-Sellers",
