@@ -5,7 +5,9 @@ import { handleSession } from "@nexus/identity-and-access";
 import { buildDb } from "@/lib/db";
 import { buildEventBus } from "@/lib/events";
 import { fetchUserOrders, statusLabel, ipClearanceLabel } from "@/lib/shoes/orders";
+import { computeSellPrice, formatCents } from "@/lib/shoes/pricing";
 import type { PrintJobStatus } from "@/lib/shoes/print-jobs";
+import type { OrderDetail } from "@/lib/shoes/orders";
 
 export const metadata = {
   title: "My Orders — Solework",
@@ -39,11 +41,27 @@ async function getCurrentUserId(): Promise<string | null> {
   }
 }
 
+async function computeOrderPrices(
+  orders: OrderDetail[]
+): Promise<Map<string, number>> {
+  const priceMap = new Map<string, number>();
+  await Promise.all(
+    orders.map(async (order) => {
+      const breakdown = await computeSellPrice(order.silhouetteId, order.colorwayId);
+      if (breakdown) {
+        priceMap.set(order.printJobId, breakdown.sellPriceCents);
+      }
+    })
+  );
+  return priceMap;
+}
+
 export default async function OrdersPage(): Promise<JSX.Element> {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login?next=/orders");
 
   const orders = await fetchUserOrders(userId);
+  const priceMap = await computeOrderPrices(orders);
 
   return (
     <main>
@@ -89,7 +107,7 @@ export default async function OrdersPage(): Promise<JSX.Element> {
                   <p className="muted" style={{ margin: "0 0 0.5rem", fontSize: "0.875rem" }}>
                     US {order.usSize} · {order.soleProfile.replace("_", " ")} sole · {order.toeShape} toe
                   </p>
-                  <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+                  <p className="muted" style={{ margin: "0 0 0.25rem", fontSize: "0.8rem" }}>
                     Order #{order.orderId.slice(0, 8).toUpperCase()} ·{" "}
                     {new Date(order.createdAt).toLocaleDateString("en-US", {
                       month: "short",
@@ -97,6 +115,11 @@ export default async function OrdersPage(): Promise<JSX.Element> {
                       year: "numeric",
                     })}
                   </p>
+                  {priceMap.has(order.printJobId) && (
+                    <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#1d4ed8" }}>
+                      {formatCents(priceMap.get(order.printJobId)!)}
+                    </p>
+                  )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                   <span

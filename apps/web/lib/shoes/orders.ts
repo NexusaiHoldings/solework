@@ -17,7 +17,9 @@ export interface OrderDetail {
   shippedAt: string | null;
   createdAt: string;
   designSessionId: string;
+  silhouetteId: string;
   silhouetteName: string;
+  colorwayId: string;
   colorwayName: string;
   colorwayHexPrimary: string;
   colorwayHexSecondary: string;
@@ -36,7 +38,9 @@ type OrderRow = {
   shipped_at: string | null;
   print_created_at: string;
   design_session_id: string;
+  silhouette_id: string;
   silhouette_name: string;
+  colorway_id: string;
   colorway_name: string;
   colorway_hex_primary: string;
   colorway_hex_secondary: string;
@@ -56,7 +60,9 @@ function rowToOrder(row: OrderRow): OrderDetail {
     shippedAt: row.shipped_at,
     createdAt: row.print_created_at,
     designSessionId: row.design_session_id,
+    silhouetteId: row.silhouette_id,
     silhouetteName: row.silhouette_name,
+    colorwayId: row.colorway_id,
     colorwayName: row.colorway_name,
     colorwayHexPrimary: row.colorway_hex_primary,
     colorwayHexSecondary: row.colorway_hex_secondary,
@@ -76,7 +82,9 @@ const ORDER_SELECT = `
          pj.shipped_at,
          pj.created_at    AS print_created_at,
          ds.id            AS design_session_id,
+         ss.id            AS silhouette_id,
          ss.name          AS silhouette_name,
+         sc.id            AS colorway_id,
          sc.name          AS colorway_name,
          sc.hex_primary   AS colorway_hex_primary,
          sc.hex_secondary AS colorway_hex_secondary,
