@@ -1,7 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ShoeSilhouette, ShoeColorway } from "@/lib/shoes/design-sessions";
+
+interface PriceBreakdown {
+  materialName: string;
+  baseCostCents: number;
+  tierName: string;
+  tierAddCents: number;
+  totalCostCents: number;
+  marginPct: number;
+  sellPriceCents: number;
+}
+
+function formatCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+}
 
 const SOLE_PROFILES = [
   { value: "flat", label: "Flat" },
@@ -178,9 +192,39 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [savedSession, setSavedSession] = useState<SaveResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   const activeSilhouette = silhouettes.find((s) => s.id === design.silhouetteId);
   const activeColorway = colorways.find((c) => c.id === design.colorwayId);
+
+  const fetchPrice = useCallback(async (silhouetteId: string, colorwayId: string) => {
+    if (!silhouetteId || !colorwayId) return;
+    setPriceLoading(true);
+    try {
+      const res = await fetch("/api/shoes/pricing/compute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ silhouetteId, colorwayId }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as PriceBreakdown;
+        setPriceBreakdown(data);
+      } else {
+        setPriceBreakdown(null);
+      }
+    } catch {
+      setPriceBreakdown(null);
+    } finally {
+      setPriceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (design.silhouetteId && design.colorwayId) {
+      void fetchPrice(design.silhouetteId, design.colorwayId);
+    }
+  }, [design.silhouetteId, design.colorwayId, fetchPrice]);
 
   const handleChange = useCallback(
     <K extends keyof DesignState>(field: K, value: DesignState[K]) => {
@@ -282,6 +326,27 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
               />
             </div>
           )}
+
+          {/* Estimated price panel */}
+          <div style={{ marginTop: "1rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
+            {priceLoading ? (
+              <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>Computing price…</p>
+            ) : priceBreakdown ? (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", color: "#6b7280" }}>
+                  Estimated price
+                </p>
+                <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: "#1d4ed8" }}>
+                  {formatCents(priceBreakdown.sellPriceCents)}
+                </p>
+                <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.72rem" }}>
+                  Material {formatCents(priceBreakdown.baseCostCents)} + {priceBreakdown.tierName} tier {formatCents(priceBreakdown.tierAddCents)} · {priceBreakdown.marginPct.toFixed(0)}% margin
+                </p>
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>Select silhouette and colorway to see price.</p>
+            )}
+          </div>
         </div>
 
         {/* Validation / save feedback */}
