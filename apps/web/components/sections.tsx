@@ -65,20 +65,58 @@ function SectionHeading({ eyebrow, title, subhead }: { eyebrow?: string; title?:
 function Hero(s: HeroSection, ctx: SectionContext): JSX.Element {
   const img = resolveImage(s.image, ctx);
   const primary = s.primaryCta || ctx.fallbackCta;
+  // No hero image → render a CENTERED single column. The old layout put the
+  // text in a 2-column flex's left side and (when the image resolved to null —
+  // common, e.g. site_media('hero_image') unset) left the right half empty, so
+  // the headline/subhead/buttons read as off-center on every imageless build.
+  // With an image we keep the 2-column text-left + image-right layout.
+  const centered = !img;
   return (
     <section style={{ padding: "40px 0 8px" }}>
-      <div style={{ display: "flex", gap: 40, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 380px", minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 40,
+          alignItems: "center",
+          flexWrap: "wrap",
+          justifyContent: centered ? "center" : "flex-start",
+        }}
+      >
+        <div
+          style={{
+            flex: centered ? "0 1 780px" : "1 1 380px",
+            minWidth: 0,
+            margin: centered ? "0 auto" : undefined,
+            textAlign: centered ? "center" : "left",
+          }}
+        >
           {s.eyebrow ? <span className="eyebrow">{s.eyebrow}</span> : null}
           <h1 style={{ fontSize: "2.9rem", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: "0.9rem" }}>
             {s.headline}
           </h1>
           {s.subhead ? (
-            <p style={{ fontSize: "1.2rem", color: "var(--substrate-muted)", lineHeight: 1.5, marginBottom: "1.9rem", maxWidth: 560 }}>
+            <p
+              style={{
+                fontSize: "1.2rem",
+                color: "var(--substrate-muted)",
+                lineHeight: 1.5,
+                marginBottom: "1.9rem",
+                maxWidth: 560,
+                marginLeft: centered ? "auto" : undefined,
+                marginRight: centered ? "auto" : undefined,
+              }}
+            >
               {s.subhead}
             </p>
           ) : null}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              justifyContent: centered ? "center" : "flex-start",
+            }}
+          >
             <Link href={primary.href} className="btn">{primary.label}</Link>
             {s.secondaryCta ? <Link href={s.secondaryCta.href} className="btn secondary">{s.secondaryCta.label}</Link> : null}
           </div>
