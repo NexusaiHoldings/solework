@@ -21,17 +21,9 @@ export interface SkuGroup {
 
 export type StockStatus = "in_stock" | "low_stock" | "sold_out";
 
-let dbPool: Pool | null = null;
-
-function getPool(): Pool {
-  if (!dbPool) {
-    dbPool = new Pool({ connectionString: process.env.DATABASE_URL });
-  }
-  return dbPool;
-}
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function fetchShoeSkus(): Promise<ShoeSku[]> {
-  const pool = getPool();
   type Row = {
     id: string;
     name: string;
