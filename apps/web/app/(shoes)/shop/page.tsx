@@ -303,23 +303,35 @@ function BackSoonState(): JSX.Element {
 
 const drawerScript = `
 (function () {
-  // Hover: slide Quick add button up into view
+  function openDrawer(targetId) {
+    var dialog = document.getElementById(targetId);
+    if (dialog) dialog.showModal();
+  }
+
+  // Hover: slide Quick add button up into view; card click opens drawer
   document.querySelectorAll('.sku-card').forEach(function (card) {
     var btn = card.querySelector('.quick-add-btn');
-    if (!btn) return;
-    card.addEventListener('mouseenter', function () {
-      btn.style.transform = 'translateY(0)';
-    });
-    card.addEventListener('mouseleave', function () {
-      btn.style.transform = 'translateY(100%)';
-    });
+    if (btn) {
+      card.addEventListener('mouseenter', function () {
+        btn.style.transform = 'translateY(0)';
+      });
+      card.addEventListener('mouseleave', function () {
+        btn.style.transform = 'translateY(100%)';
+      });
+      // Clicking card body (not sold-out) opens drawer
+      card.addEventListener('click', function (e) {
+        if (e.target === btn) return; // button handles itself
+        var groupId = card.dataset.groupId;
+        if (groupId) openDrawer('drawer-' + groupId);
+      });
+    }
   });
 
   // Open drawer via Quick add button
   document.querySelectorAll('[data-target]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var dialog = document.getElementById(btn.dataset.target);
-      if (dialog) dialog.showModal();
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openDrawer(btn.dataset.target);
     });
   });
 
