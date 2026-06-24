@@ -24,6 +24,7 @@
  */
 
 import type { HandlerContext, HandlerResult } from "@nexus/identity-and-access";
+import { handleDispatchPrintJob } from "./dispatch_print_job";
 
 type Args = Record<string, unknown>;
 
@@ -31,5 +32,5 @@ export const DOMAIN_DISPATCH: Record<
   string,
   (ctx: HandlerContext, args: Args) => Promise<HandlerResult>
 > = {
-  // Build agent appends entries here per CTO-declared new_domain_tool.
+  dispatch_print_job: (ctx, args) => handleDispatchPrintJob(ctx, args),
 };
