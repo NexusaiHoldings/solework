@@ -26,6 +26,7 @@ export const NAV_CONFIG: NavConfig = {
     { href: "/", label: "Home" },
     { href: "/inventory", label: "Inventory" },
     { href: "/orders", label: "Orders" },
+    { href: "/pricing", label: "Pricing" },
     { href: "/shop", label: "Shop" },
     { href: "/studio", label: "Studio" },
   ],
