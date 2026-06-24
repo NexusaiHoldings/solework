@@ -1,158 +1,87 @@
-import { relations } from "drizzle-orm";
-import {
-  boolean,
-  integer,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+/**
+ * Shoe domain schema (F1-002).
+ *
+ * Tables: shoe_silhouettes, shoe_colorways, shoe_design_sessions,
+ * print_jobs, shoe_skus. Picked up by packages/db/migrate.ts via
+ * the *_DDL constant convention.
+ */
+export const SHOES_DDL = `
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'shoe_design_validation_status') THEN
+    CREATE TYPE shoe_design_validation_status AS ENUM ('pending', 'valid', 'rejected');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'shoe_print_job_status') THEN
+    CREATE TYPE shoe_print_job_status AS ENUM ('queued', 'printing', 'qc_hold', 'shipped', 'cancelled');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'shoe_print_job_ip_clearance_status') THEN
+    CREATE TYPE shoe_print_job_ip_clearance_status AS ENUM ('pending', 'cleared', 'rejected');
+  END IF;
+END $$;
 
-export const shoeDesignValidationStatusEnum = pgEnum("shoe_design_validation_status", [
-  "pending",
-  "valid",
-  "rejected",
-]);
+CREATE TABLE IF NOT EXISTS shoe_silhouettes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(120) NOT NULL,
+  mesh_url text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  compliance_certified boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-export const shoePrintJobStatusEnum = pgEnum("shoe_print_job_status", [
-  "queued",
-  "printing",
-  "qc_hold",
-  "shipped",
-  "cancelled",
-]);
+CREATE TABLE IF NOT EXISTS shoe_colorways (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(120) NOT NULL,
+  hex_primary varchar(7) NOT NULL,
+  hex_secondary varchar(7) NOT NULL,
+  material_type varchar(120) NOT NULL
+);
 
-export const shoePrintJobIpClearanceStatusEnum = pgEnum("shoe_print_job_ip_clearance_status", [
-  "pending",
-  "cleared",
-  "rejected",
-]);
+CREATE TABLE IF NOT EXISTS shoe_design_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  silhouette_id uuid NOT NULL REFERENCES shoe_silhouettes(id) ON DELETE RESTRICT,
+  colorway_id uuid NOT NULL REFERENCES shoe_colorways(id) ON DELETE RESTRICT,
+  sole_profile varchar(120) NOT NULL,
+  toe_shape varchar(120) NOT NULL,
+  us_size numeric(4,1) NOT NULL,
+  validation_status shoe_design_validation_status NOT NULL DEFAULT 'pending',
+  rejection_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-export const shoeSilhouettes = pgTable("shoe_silhouettes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 120 }).notNull(),
-  meshUrl: text("mesh_url").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  complianceCertified: boolean("compliance_certified").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+CREATE TABLE IF NOT EXISTS print_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  design_session_id uuid NOT NULL REFERENCES shoe_design_sessions(id) ON DELETE CASCADE,
+  order_id uuid NOT NULL,
+  status shoe_print_job_status NOT NULL DEFAULT 'queued',
+  ip_clearance_status shoe_print_job_ip_clearance_status NOT NULL DEFAULT 'pending',
+  printer_farm_job_id varchar(120),
+  dispatched_at timestamptz,
+  shipped_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-export const shoeColorways = pgTable("shoe_colorways", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 120 }).notNull(),
-  hexPrimary: varchar("hex_primary", { length: 7 }).notNull(),
-  hexSecondary: varchar("hex_secondary", { length: 7 }).notNull(),
-  materialType: varchar("material_type", { length: 120 }).notNull(),
-});
+CREATE TABLE IF NOT EXISTS shoe_skus (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(120) NOT NULL,
+  silhouette_id uuid NOT NULL REFERENCES shoe_silhouettes(id) ON DELETE RESTRICT,
+  colorway_id uuid NOT NULL REFERENCES shoe_colorways(id) ON DELETE RESTRICT,
+  us_size numeric(4,1) NOT NULL,
+  stock_quantity integer NOT NULL DEFAULT 0,
+  price_cents integer NOT NULL,
+  is_active boolean NOT NULL DEFAULT true
+);
 
-export const shoeDesignSessions = pgTable("shoe_design_sessions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull(),
-  silhouetteId: uuid("silhouette_id")
-    .notNull()
-    .references(() => shoeSilhouettes.id, { onDelete: "restrict" }),
-  colorwayId: uuid("colorway_id")
-    .notNull()
-    .references(() => shoeColorways.id, { onDelete: "restrict" }),
-  soleProfile: varchar("sole_profile", { length: 120 }).notNull(),
-  toeShape: varchar("toe_shape", { length: 120 }).notNull(),
-  usSize: numeric("us_size", { precision: 4, scale: 1 }).notNull(),
-  validationStatus: shoeDesignValidationStatusEnum("validation_status")
-    .notNull()
-    .default("pending"),
-  rejectionReason: text("rejection_reason"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-export const printJobs = pgTable("print_jobs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  designSessionId: uuid("design_session_id")
-    .notNull()
-    .references(() => shoeDesignSessions.id, { onDelete: "cascade" }),
-  orderId: uuid("order_id").notNull(),
-  status: shoePrintJobStatusEnum("status").notNull().default("queued"),
-  ipClearanceStatus: shoePrintJobIpClearanceStatusEnum("ip_clearance_status")
-    .notNull()
-    .default("pending"),
-  printerFarmJobId: varchar("printer_farm_job_id", { length: 120 }),
-  dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
-  shippedAt: timestamp("shipped_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const shoeSkus = pgTable("shoe_skus", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 120 }).notNull(),
-  silhouetteId: uuid("silhouette_id")
-    .notNull()
-    .references(() => shoeSilhouettes.id, { onDelete: "restrict" }),
-  colorwayId: uuid("colorway_id")
-    .notNull()
-    .references(() => shoeColorways.id, { onDelete: "restrict" }),
-  usSize: numeric("us_size", { precision: 4, scale: 1 }).notNull(),
-  stockQuantity: integer("stock_quantity").notNull().default(0),
-  priceCents: integer("price_cents").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-});
-
-export const shoeSilhouettesRelations = relations(shoeSilhouettes, ({ many }) => ({
-  designSessions: many(shoeDesignSessions),
-  skus: many(shoeSkus),
-}));
-
-export const shoeColorwaysRelations = relations(shoeColorways, ({ many }) => ({
-  designSessions: many(shoeDesignSessions),
-  skus: many(shoeSkus),
-}));
-
-export const shoeDesignSessionsRelations = relations(shoeDesignSessions, ({ one, many }) => ({
-  silhouette: one(shoeSilhouettes, {
-    fields: [shoeDesignSessions.silhouetteId],
-    references: [shoeSilhouettes.id],
-  }),
-  colorway: one(shoeColorways, {
-    fields: [shoeDesignSessions.colorwayId],
-    references: [shoeColorways.id],
-  }),
-  printJobs: many(printJobs),
-}));
-
-export const printJobsRelations = relations(printJobs, ({ one }) => ({
-  designSession: one(shoeDesignSessions, {
-    fields: [printJobs.designSessionId],
-    references: [shoeDesignSessions.id],
-  }),
-}));
-
-export const shoeSkusRelations = relations(shoeSkus, ({ one }) => ({
-  silhouette: one(shoeSilhouettes, {
-    fields: [shoeSkus.silhouetteId],
-    references: [shoeSilhouettes.id],
-  }),
-  colorway: one(shoeColorways, {
-    fields: [shoeSkus.colorwayId],
-    references: [shoeColorways.id],
-  }),
-}));
-
-export type ShoeSilhouette = typeof shoeSilhouettes.$inferSelect;
-export type NewShoeSilhouette = typeof shoeSilhouettes.$inferInsert;
-
-export type ShoeColorway = typeof shoeColorways.$inferSelect;
-export type NewShoeColorway = typeof shoeColorways.$inferInsert;
-
-export type ShoeDesignSession = typeof shoeDesignSessions.$inferSelect;
-export type NewShoeDesignSession = typeof shoeDesignSessions.$inferInsert;
-
-export type PrintJob = typeof printJobs.$inferSelect;
-export type NewPrintJob = typeof printJobs.$inferInsert;
-
-export type ShoeSku = typeof shoeSkus.$inferSelect;
-export type NewShoeSku = typeof shoeSkus.$inferInsert;
+CREATE INDEX IF NOT EXISTS idx_shoe_design_sessions_user_id
+  ON shoe_design_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_shoe_design_sessions_validation_status
+  ON shoe_design_sessions (validation_status);
+CREATE INDEX IF NOT EXISTS idx_print_jobs_design_session_id
+  ON print_jobs (design_session_id);
+CREATE INDEX IF NOT EXISTS idx_print_jobs_status
+  ON print_jobs (status);
+CREATE INDEX IF NOT EXISTS idx_shoe_skus_silhouette_colorway
+  ON shoe_skus (silhouette_id, colorway_id);
+CREATE INDEX IF NOT EXISTS idx_shoe_skus_is_active
+  ON shoe_skus (is_active) WHERE is_active = true;
+`;
