@@ -8,8 +8,8 @@ export const NAV_CONFIG = {
   groups: [
     {
       label: "Admin",
-      items: [
-        { label: "SKUs", href: "/admin/skus" },
+      links: [
+        { label: "SKU Catalog", href: "/admin/skus" },
         { label: "Print Queue", href: "/admin/print-queue" },
       ],
     },
