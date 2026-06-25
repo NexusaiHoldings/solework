@@ -76,100 +76,103 @@ function ShoePreview({
   const primary = colorway?.hexPrimary ?? "#cbd5e1";
   const secondary = colorway?.hexSecondary ?? "#94a3b8";
 
-  // Heel heights by sole profile
-  const heelH: Record<SoleProfile, number> = {
-    flat: 8,
-    wedge: 24,
-    block_heel: 40,
-    stiletto: 60,
-    platform: 20,
-    sport: 12,
+  // Sole geometry by profile: outsole thickness + rear heel lift (px, in the
+  // 0..200 viewBox). A recognizable side-profile sneaker is drawn as SVG and
+  // recolored from the selected colorway, rather than abstract boxes.
+  const soleGeo: Record<SoleProfile, { sole: number; heel: number }> = {
+    flat: { sole: 14, heel: 2 },
+    wedge: { sole: 14, heel: 20 },
+    block_heel: { sole: 12, heel: 34 },
+    stiletto: { sole: 8, heel: 50 },
+    platform: { sole: 30, heel: 6 },
+    sport: { sole: 16, heel: 4 },
   };
+  const { sole, heel } = soleGeo[soleProfile] ?? { sole: 16, heel: 4 };
 
-  // Toe tip by toe shape
-  const toeR: Record<ToeShape, string> = {
-    round: "50% 50% 0 0 / 60% 60% 0 0",
-    square: "4px 4px 0 0",
-    pointed: "50% 50% 0 0 / 80% 80% 0 0",
-    open: "4px 4px 0 0",
-  };
+  const baseY = 176; // ground line in the viewBox
+  const soleTopFront = baseY - sole; // outsole top near the toe
+  const ub = soleTopFront - 2; // upper sits just above the sole
 
-  const heel = heelH[soleProfile];
+  // Toe termination (front of the upper) by toe shape.
+  const toeTip =
+    toeShape === "pointed"
+      ? `Q330 ${ub - 14} 326 ${ub} Q322 ${ub + 1} 306 ${ub}`
+      : toeShape === "square"
+      ? `L312 ${ub - 24} L312 ${ub} L306 ${ub}`
+      : toeShape === "open"
+      ? `Q318 ${ub - 18} 304 ${ub - 7} L290 ${ub}`
+      : `Q322 ${ub - 20} 314 ${ub - 6} Q310 ${ub} 298 ${ub}`; // round
 
   return (
-    <div
-      aria-label={`Shoe preview: ${silhouette?.name ?? "silhouette"} in ${colorway?.name ?? "colorway"}`}
-      style={{
-        position: "relative",
-        width: "100%",
-        maxWidth: "360px",
-        margin: "0 auto",
-        height: "200px",
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-      }}
-    >
-      {/* Sole */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: "10%",
-          right: "10%",
-          height: "18px",
-          backgroundColor: secondary,
-          borderRadius: "0 0 12px 12px",
-        }}
-      />
-      {/* Heel block */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "18px",
-          right: "12%",
-          width: "18%",
-          height: `${heel}px`,
-          backgroundColor: secondary,
-          borderRadius: "2px",
-        }}
-      />
-      {/* Upper body */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "18px",
-          left: "10%",
-          right: soleProfile === "stiletto" ? "28%" : "18%",
-          height: "90px",
-          backgroundColor: primary,
-          borderRadius: toeR[toeShape],
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "0.7rem",
-          color: "#fff",
-          fontWeight: 600,
-          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
-          overflow: "hidden",
-        }}
+    <div style={{ width: "100%", maxWidth: "360px", margin: "0 auto" }}>
+      <svg
+        viewBox="0 0 360 200"
+        role="img"
+        aria-label={`Shoe preview: ${silhouette?.name ?? "silhouette"} in ${colorway?.name ?? "colorway"}`}
+        style={{ width: "100%", height: "auto", display: "block" }}
       >
-        {silhouette?.name ?? "Select silhouette"}
-      </div>
-      {/* Open-toe cutout */}
-      {toeShape === "open" && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "28px",
-            left: "10%",
-            width: "20%",
-            height: "50px",
-            backgroundColor: "#f9fafb",
-            borderRadius: "0 0 0 50%",
-          }}
+        {/* rear heel lift wedge for heeled profiles */}
+        {heel > 6 && (
+          <path
+            d={`M76 ${baseY} L76 ${baseY - heel} Q126 ${baseY - heel} 156 ${soleTopFront} L156 ${baseY} Z`}
+            fill={secondary}
+          />
+        )}
+        {/* outsole */}
+        <path
+          d={`M62 ${baseY} Q46 ${baseY} 48 ${baseY - sole} L304 ${soleTopFront - 2} Q344 ${soleTopFront - 4} 340 ${soleTopFront + sole - 6} Q338 ${baseY} 316 ${baseY} Z`}
+          fill={secondary}
         />
-      )}
+        {/* midsole highlight */}
+        <path
+          d={`M64 ${baseY - sole + 3} L324 ${soleTopFront + 1}`}
+          stroke="#ffffff"
+          strokeOpacity="0.55"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+        />
+        {/* upper */}
+        <path
+          d={`M64 ${ub}
+              L62 ${ub - 58}
+              Q62 ${ub - 74} 84 ${ub - 74}
+              L108 ${ub - 72}
+              Q136 ${ub - 90} 162 ${ub - 64}
+              L190 ${ub - 40}
+              Q248 ${ub - 46} 300 ${ub - 18}
+              ${toeTip}
+              L64 ${ub} Z`}
+          fill={primary}
+        />
+        {/* ankle collar opening */}
+        <ellipse cx="96" cy={ub - 70} rx="22" ry="9" fill={secondary} fillOpacity="0.85" />
+        {/* accent swoosh */}
+        <path
+          d={`M156 ${ub - 6} Q216 ${ub - 30} 296 ${ub - 18}`}
+          stroke={secondary}
+          strokeWidth="9"
+          fill="none"
+          strokeLinecap="round"
+        />
+        {/* laces */}
+        {[0, 1, 2].map((i) => (
+          <line
+            key={i}
+            x1={156 + i * 18}
+            y1={ub - 64 + i * 6}
+            x2={172 + i * 18}
+            y2={ub - 50 + i * 6}
+            stroke="#ffffff"
+            strokeOpacity="0.85"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        ))}
+      </svg>
+      <p style={{ textAlign: "center", fontSize: "0.8rem", color: "#6b7280", marginTop: "0.5rem" }}>
+        {silhouette?.name ?? "Select a silhouette"} · {colorway?.name ?? "colorway"}
+      </p>
     </div>
   );
 }
