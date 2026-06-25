@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
+import { Canvas } from "@react-three/fiber";
+import { useGLTF, OrbitControls, Center } from "@react-three/drei";
 import type { ShoeSilhouette, ShoeColorway } from "@/lib/shoes/design-sessions";
 
 interface PriceBreakdown {
@@ -62,7 +64,7 @@ interface Props {
   colorways: ShoeColorway[];
 }
 
-function ShoePreview({
+function ShoePreview2D({
   silhouette,
   colorway,
   soleProfile,
@@ -173,6 +175,75 @@ function ShoePreview({
       <p style={{ textAlign: "center", fontSize: "0.8rem", color: "#6b7280", marginTop: "0.5rem" }}>
         {silhouette?.name ?? "Select a silhouette"} · {colorway?.name ?? "colorway"}
       </p>
+    </div>
+  );
+}
+
+// ── Real 3D preview (generative-3d-rendering-001) ──────────────────────────────
+// Loads the silhouette's GLTF mesh (shoe_silhouettes.mesh_url) and tints it with the
+// selected colorway. If the mesh isn't generated yet (mesh_url 404 / absent), the
+// ErrorBoundary falls back to the 2D SVG preview — the studio never breaks.
+type PreviewProps = {
+  silhouette: ShoeSilhouette | undefined;
+  colorway: ShoeColorway | undefined;
+  soleProfile: SoleProfile;
+  toeShape: ToeShape;
+};
+
+class PreviewErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  constructor(props: { fallback: ReactNode; children: ReactNode }) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    /* swallow — fall back to the 2D preview */
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function Shoe3DModel({ meshUrl, primary }: { meshUrl: string; primary: string }): React.ReactElement {
+  const { scene } = useGLTF(meshUrl);
+  const cloned = useMemo(() => {
+    const c = scene.clone(true);
+    c.traverse((o: unknown) => {
+      const mesh = o as { isMesh?: boolean; material?: { clone: () => unknown; color?: { set: (h: string) => void } } };
+      if (mesh.isMesh && mesh.material) {
+        const m = mesh.material.clone() as { color?: { set: (h: string) => void } };
+        if (m.color) m.color.set(primary);
+        (mesh as { material: unknown }).material = m;
+      }
+    });
+    return c;
+  }, [scene, primary]);
+  return <primitive object={cloned} />;
+}
+
+function ShoePreview(props: PreviewProps): React.ReactElement {
+  const meshUrl = props.silhouette?.meshUrl;
+  const primary = props.colorway?.hexPrimary ?? "#cbd5e1";
+  const fallback = <ShoePreview2D {...props} />;
+  // No mesh URL → don't even mount the Canvas; show the 2D preview.
+  if (!meshUrl) return fallback;
+  return (
+    <div style={{ width: "100%", maxWidth: 360, margin: "0 auto", height: 240 }}>
+      <PreviewErrorBoundary fallback={fallback}>
+        <Suspense fallback={fallback}>
+          <Canvas camera={{ position: [0, 0.4, 2.6], fov: 40 }} dpr={[1, 2]}>
+            <ambientLight intensity={0.8} />
+            <directionalLight position={[3, 5, 3]} intensity={1.0} />
+            <directionalLight position={[-3, 2, -2]} intensity={0.4} />
+            <Center>
+              <Shoe3DModel meshUrl={meshUrl} primary={primary} />
+            </Center>
+            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.0} />
+          </Canvas>
+        </Suspense>
+      </PreviewErrorBoundary>
     </div>
   );
 }
