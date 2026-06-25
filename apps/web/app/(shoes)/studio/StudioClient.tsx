@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense, Component, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
-import { useGLTF, OrbitControls, Center } from "@react-three/drei";
+import { useGLTF, OrbitControls, Bounds } from "@react-three/drei";
 import { Color } from "three";
 import type { ShoeSilhouette, ShoeColorway } from "@/lib/shoes/design-sessions";
 
@@ -161,14 +161,15 @@ function ShoePreview({
     <div style={{ position: "relative", width: "100%", height: 300 }}>
       <PreviewErrorBoundary fallback={<PreviewMessage text="3D preview unavailable — your design is still saved." />}>
         <Suspense fallback={<PreviewMessage text="Building your shoe…" />}>
-          <Canvas camera={{ position: [0, 0.5, 2.7], fov: 40 }} dpr={[1, 2]}>
+          <Canvas camera={{ position: [2.4, 1.4, 3.2], fov: 40 }} dpr={[1, 2]}>
             <ambientLight intensity={0.85} />
             <directionalLight position={[3, 5, 3]} intensity={1.05} />
             <directionalLight position={[-3, 2, -2]} intensity={0.45} />
-            <Center key={meshUrl}>
+            {/* Bounds auto-frames the model regardless of its size/orientation */}
+            <Bounds key={meshUrl} fit clip observe margin={1.25}>
               <Shoe3DModel meshUrl={meshUrl} primary={primary} secondary={secondary} materialType={colorway?.materialType} />
-            </Center>
-            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.1} />
+            </Bounds>
+            <OrbitControls makeDefault enablePan={false} autoRotate autoRotateSpeed={1.1} />
           </Canvas>
         </Suspense>
       </PreviewErrorBoundary>
