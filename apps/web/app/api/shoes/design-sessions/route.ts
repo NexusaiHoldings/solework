@@ -31,6 +31,7 @@ const CreateSessionSchema = z.object({
   sole_profile: z.enum(["flat", "wedge", "block_heel", "stiletto", "platform", "sport"]),
   toe_shape: z.enum(["round", "square", "pointed", "open"]),
   us_size: z.number().min(4).max(16),
+  print_mesh_url: z.string().url().optional(),  // print-ready CAD artifact captured at save time
 });
 
 export async function GET(): Promise<NextResponse> {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     soleProfile: parsed.data.sole_profile,
     toeShape: parsed.data.toe_shape,
     usSize: parsed.data.us_size,
+    printMeshUrl: parsed.data.print_mesh_url ?? null,
   });
 
   if (!session) {
