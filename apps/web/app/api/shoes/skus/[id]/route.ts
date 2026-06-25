@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Pool } from "pg";
+import { getAdminUser } from "@/lib/admin-auth";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -16,6 +17,9 @@ const UpdateSkuSchema = z.object({
 });
 
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
+  if (!(await getAdminUser())) {
+    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
+  }
   const skuId = params.id;
   if (!skuId || !/^[0-9a-f-]{36}$/.test(skuId)) {
     return NextResponse.json({ error: "Invalid SKU id" }, { status: 400 });
@@ -77,6 +81,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
+  if (!(await getAdminUser())) {
+    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
+  }
   const skuId = params.id;
   if (!skuId || !/^[0-9a-f-]{36}$/.test(skuId)) {
     return NextResponse.json({ error: "Invalid SKU id" }, { status: 400 });

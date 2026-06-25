@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { computeSellPrice } from "@/lib/shoes/pricing";
+import { getAdminUser } from "@/lib/admin-auth";
 
 const ComputeSchema = z.object({
   silhouetteId: z.string().uuid(),
@@ -31,5 +32,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  return NextResponse.json(breakdown, { headers: { "Cache-Control": "no-store" } });
+  // Customers may compute the SELL price, but must never see our cost basis or margin.
+  // Admins (e.g. the pricing tool's preview) get the full breakdown.
+  const isAdmin = !!(await getAdminUser());
+  const payload = isAdmin
+    ? breakdown
+    : { sellPriceCents: breakdown.sellPriceCents, materialName: breakdown.materialName, tierName: breakdown.tierName };
+
+  return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }

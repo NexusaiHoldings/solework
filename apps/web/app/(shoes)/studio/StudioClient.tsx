@@ -10,12 +10,13 @@ const COMPANY = process.env.NEXT_PUBLIC_COMPANY_SLUG || "solework";
 
 interface PriceBreakdown {
   materialName: string;
-  baseCostCents: number;
   tierName: string;
-  tierAddCents: number;
-  totalCostCents: number;
-  marginPct: number;
   sellPriceCents: number;
+  // cost/margin fields are admin-only and absent from the customer-facing response
+  baseCostCents?: number;
+  tierAddCents?: number;
+  totalCostCents?: number;
+  marginPct?: number;
 }
 
 function formatCents(cents: number): string {
@@ -267,7 +268,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
                 <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", color: "#6b7280" }}>Estimated price</p>
                 <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: "#1d4ed8" }}>{formatCents(priceBreakdown.sellPriceCents)}</p>
                 <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.72rem" }}>
-                  Material {formatCents(priceBreakdown.baseCostCents)} + {priceBreakdown.tierName} tier {formatCents(priceBreakdown.tierAddCents)} · {priceBreakdown.marginPct.toFixed(0)}% margin
+                  {priceBreakdown.materialName} · {priceBreakdown.tierName}
                 </p>
               </div>
             ) : (
