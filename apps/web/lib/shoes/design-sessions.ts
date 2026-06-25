@@ -12,6 +12,9 @@ export interface ShoeSilhouette {
   meshUrl: string;
   isActive: boolean;
   complianceCertified: boolean;
+  gender: string; // 'mens' | 'womens' | 'unisex'
+  allowedSoleProfiles: string[];
+  allowedToeShapes: string[];
 }
 
 export interface ShoeColorway {
@@ -45,10 +48,14 @@ export async function fetchActiveSilhouettes(): Promise<ShoeSilhouette[]> {
     mesh_url: string;
     is_active: boolean;
     compliance_certified: boolean;
+    gender: string | null;
+    allowed_sole_profiles: string[] | null;
+    allowed_toe_shapes: string[] | null;
   };
   try {
     const result = await pool.query<Row>(
-      `SELECT id, name, mesh_url, is_active, compliance_certified
+      `SELECT id, name, mesh_url, is_active, compliance_certified,
+              gender, allowed_sole_profiles, allowed_toe_shapes
        FROM shoe_silhouettes
        WHERE is_active = true
        ORDER BY name ASC`
@@ -59,6 +66,9 @@ export async function fetchActiveSilhouettes(): Promise<ShoeSilhouette[]> {
       meshUrl: row.mesh_url,
       isActive: row.is_active,
       complianceCertified: row.compliance_certified,
+      gender: row.gender || "unisex",
+      allowedSoleProfiles: row.allowed_sole_profiles || [],
+      allowedToeShapes: row.allowed_toe_shapes || [],
     }));
   } catch {
     return [];

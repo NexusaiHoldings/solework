@@ -119,8 +119,45 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
   const [renderUrl, setRenderUrl] = useState<string | null>(null);
   const [renderLoading, setRenderLoading] = useState(false);
 
-  const activeSilhouette = silhouettes.find((s) => s.id === design.silhouetteId);
+  // Gender is the FIRST choice; everything else flows from it.
+  const genders = Array.from(new Set(silhouettes.map((s) => s.gender))).filter(Boolean);
+  const [gender, setGender] = useState<string>(silhouettes[0]?.gender ?? "mens");
+  const genderSilhouettes = silhouettes.filter((s) => s.gender === gender);
+
+  const activeSilhouette =
+    genderSilhouettes.find((s) => s.id === design.silhouetteId) ?? genderSilhouettes[0];
   const activeColorway = colorways.find((c) => c.id === design.colorwayId);
+
+  // Sole profile + toe shape are constrained by the chosen silhouette (sneakers exclude
+  // stiletto/open/pointed; the women's heel allows them). Fall back to all if unspecified.
+  const allowedSole = activeSilhouette?.allowedSoleProfiles?.length
+    ? SOLE_PROFILES.filter((sp) => activeSilhouette.allowedSoleProfiles.includes(sp.value))
+    : [...SOLE_PROFILES];
+  const allowedToe = activeSilhouette?.allowedToeShapes?.length
+    ? TOE_SHAPES.filter((ts) => activeSilhouette.allowedToeShapes.includes(ts.value))
+    : [...TOE_SHAPES];
+
+  // When the active silhouette changes, snap silhouetteId + any now-invalid sole/toe to valid values.
+  useEffect(() => {
+    if (!activeSilhouette) return;
+    const soles = activeSilhouette.allowedSoleProfiles || [];
+    const toes = activeSilhouette.allowedToeShapes || [];
+    setDesign((prev) => {
+      let next = prev;
+      if (prev.silhouetteId !== activeSilhouette.id) next = { ...next, silhouetteId: activeSilhouette.id };
+      if (soles.length && !soles.includes(prev.soleProfile)) next = { ...next, soleProfile: soles[0] as SoleProfile };
+      if (toes.length && !toes.includes(prev.toeShape)) next = { ...next, toeShape: toes[0] as ToeShape };
+      return next === prev ? prev : next;
+    });
+  }, [activeSilhouette]);
+
+  const handleGender = useCallback((g: string) => {
+    setGender(g);
+    const first = silhouettes.find((s) => s.gender === g);
+    if (first) setDesign((prev) => ({ ...prev, silhouetteId: first.id }));
+    setPhase("configure");
+    setValidation(null);
+  }, [silhouettes]);
 
   // ── fetch the photoreal render (geometry + colorway/material drive it; cached per config) ──
   const reqSeq = useRef(0);
@@ -135,6 +172,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             company: COMPANY,
+            gender,
             silhouette: activeSilhouette.name,
             colorway: activeColorway.name,
             material_type: activeColorway.materialType,
@@ -312,10 +350,22 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
           <div className="empty"><p>No shoe silhouettes are configured yet. An admin must add silhouettes before the studio is ready.</p></div>
         ) : (
           <>
+            {genders.length > 1 && (
+              <div style={{ marginBottom: "1.25rem" }}>
+                <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>For</p>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${genders.length}, 1fr)`, gap: "0.5rem" }}>
+                  {genders.map((g) => (
+                    <button key={g} type="button" onClick={() => handleGender(g)} className={gender === g ? "btn" : "btn secondary"} style={{ fontSize: "0.85rem", padding: "0.5rem 0.25rem", textTransform: "capitalize" }}>
+                      {g === "mens" ? "Men's" : g === "womens" ? "Women's" : g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom: "1.25rem" }}>
               <label htmlFor="silhouette" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>Silhouette</label>
-              <select id="silhouette" value={design.silhouetteId} onChange={(e) => handleChange("silhouetteId", e.target.value)} style={{ width: "100%" }}>
-                {silhouettes.map((s) => (<option key={s.id} value={s.id}>{s.name}{!s.complianceCertified ? " (not certified)" : ""}</option>))}
+              <select id="silhouette" value={activeSilhouette?.id ?? ""} onChange={(e) => handleChange("silhouetteId", e.target.value)} style={{ width: "100%" }}>
+                {genderSilhouettes.map((s) => (<option key={s.id} value={s.id}>{s.name}{!s.complianceCertified ? " (not certified)" : ""}</option>))}
               </select>
             </div>
             <div style={{ marginBottom: "1.25rem" }}>
@@ -327,15 +377,15 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
             <div style={{ marginBottom: "1.25rem" }}>
               <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>Sole Profile</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
-                {SOLE_PROFILES.map((sp) => (
+                {allowedSole.map((sp) => (
                   <button key={sp.value} type="button" onClick={() => handleChange("soleProfile", sp.value)} className={design.soleProfile === sp.value ? "btn" : "btn secondary"} style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}>{sp.label}</button>
                 ))}
               </div>
             </div>
             <div style={{ marginBottom: "1.25rem" }}>
               <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>Toe Shape</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
-                {TOE_SHAPES.map((ts) => (
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(2, allowedToe.length)}, 1fr)`, gap: "0.5rem" }}>
+                {allowedToe.map((ts) => (
                   <button key={ts.value} type="button" onClick={() => handleChange("toeShape", ts.value)} className={design.toeShape === ts.value ? "btn" : "btn secondary"} style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}>{ts.label}</button>
                 ))}
               </div>
