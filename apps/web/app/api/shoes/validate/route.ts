@@ -44,8 +44,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const result = validateDesign(parsed.data);
+  // Primary: real geometry-based printability from the parametric CAD engine
+  // (parametric-shoe-design-engine-001). Falls back to the deterministic rules table
+  // if the engine is unreachable, so validation never regresses below today's behavior.
+  const RUNTIME = (process.env.NEXT_PUBLIC_RUNTIME_URL || "https://runtime.nexusaiholdings.com").replace(/\/$/, "");
+  const COMPANY = process.env.NEXT_PUBLIC_COMPANY_SLUG || "solework";
+  try {
+    const res = await fetch(`${RUNTIME}/parametric/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company: COMPANY,
+        sole_profile: parsed.data.sole_profile,
+        toe_shape: parsed.data.toe_shape,
+        us_size: parsed.data.us_size,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        checks?: { valid: boolean; rejection_reason?: string; auto_corrections?: Record<string, unknown> };
+      };
+      if (data.checks) {
+        return NextResponse.json(
+          {
+            valid: data.checks.valid,
+            rejection_reason: data.checks.rejection_reason ?? undefined,
+            auto_corrections: data.checks.auto_corrections ?? {},
+            source: "geometry",
+          },
+          { status: 200, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+    }
+  } catch {
+    /* fall through to the rules-table validator */
+  }
 
+  const result = validateDesign(parsed.data);
   return NextResponse.json(result, {
     status: 200,
     headers: { "Cache-Control": "no-store" },
