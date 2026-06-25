@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { updateMaterialCost } from "@/lib/shoes/pricing";
+import { getAdminUser } from "@/lib/admin-auth";
 
 const UpdateSchema = z.object({
   baseCostCents: z.number().int().min(0),
@@ -10,6 +11,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
+  if (!(await getAdminUser())) {
+    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
+  }
   let rawBody: unknown;
   try {
     rawBody = await request.json();

@@ -19,6 +19,12 @@ import { NAV_CONFIG, type NavLink, type NavGroup } from "@/lib/nav-config";
 import { getSessionUser, isAdminEmail } from "@/lib/admin-auth";
 import { UserMenu } from "@/components/UserMenu";
 
+// Operator/admin-only feature routes that must NOT appear in the public nav.
+// nav-config.ts is auto-generated from the (domain) route group, so the gate lives
+// here in the component (the generated list can't distinguish customer vs admin routes).
+// /inventory = stock management; /pricing = internal cost+margin SETTING (not customer pricing).
+const ADMIN_ONLY_PATHS = new Set<string>(["/inventory", "/pricing"]);
+
 export async function TopNav(): Promise<JSX.Element> {
   const companyName = process.env.COMPANY_NAME || "Portfolio Company";
   // Resolve the session user once (NO DB hit when there is no cookie). Logged-in
@@ -63,9 +69,11 @@ export async function TopNav(): Promise<JSX.Element> {
           flexWrap: "wrap",
         }}
       >
-        {NAV_CONFIG.primary.map((link) => (
-          <NavItem key={link.href} {...link} />
-        ))}
+        {NAV_CONFIG.primary
+          .filter((link) => isAdmin || !ADMIN_ONLY_PATHS.has(link.href))
+          .map((link) => (
+            <NavItem key={link.href} {...link} />
+          ))}
         {NAV_CONFIG.groups.map((group) => (
           <NavGroupItem key={group.label} group={group} />
         ))}

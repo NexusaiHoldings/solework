@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Pool } from "pg";
+import { getAdminUser } from "@/lib/admin-auth";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -61,6 +62,9 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (!(await getAdminUser())) {
+    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
+  }
   let rawBody: unknown;
   try {
     rawBody = await request.json();
