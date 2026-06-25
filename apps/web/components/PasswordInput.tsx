@@ -53,15 +53,24 @@ export function PasswordInput({
         tabIndex={-1}
         style={{
           position: "absolute",
-          right: 8,
+          right: 6,
           top: "50%",
           transform: "translateY(-50%)",
+          // Icon-sized square — explicit height/width + minHeight:0 + padding:0 override the
+          // substrate's `main button { height: control-h; padding: 0 1rem }` rule (which otherwise
+          // makes this a full control-height button: eye pushed off-center + a visible box).
+          height: "1.75rem",
+          width: "1.75rem",
+          minHeight: 0,
+          padding: 0,
           background: "transparent",
           border: "none",
-          padding: 4,
+          borderRadius: 6,
           cursor: "pointer",
           display: "inline-flex",
           alignItems: "center",
+          justifyContent: "center",
+          lineHeight: 1,
           color: "rgba(0,0,0,0.5)",
         }}
       >
