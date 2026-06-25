@@ -1,24 +1,15 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense, Component, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { useGLTF, OrbitControls, Center } from "@react-three/drei";
 import { Color } from "three";
 import type { ShoeSilhouette, ShoeColorway } from "@/lib/shoes/design-sessions";
 
-// 3D-print material → PBR surface response. Lets the colorway's material_type
-// visibly change the 3D preview (matte flexible TPU vs sheen-ier rigid PLA+),
-// even though the generated mesh ships with a single default material.
-function materialPbr(materialType: string | undefined): { roughness: number; metalness: number } {
-  const m = (materialType || "").toLowerCase();
-  if (m.includes("tpu")) return { roughness: 0.9, metalness: 0.0 }; // flexible, matte rubber
-  if (m.includes("nylon")) return { roughness: 0.72, metalness: 0.05 }; // matte technical powder
-  if (m.includes("pla")) return { roughness: 0.45, metalness: 0.08 }; // rigid, slight sheen
-  if (m.includes("leather")) return { roughness: 0.5, metalness: 0.05 };
-  if (m.includes("canvas") || m.includes("mesh")) return { roughness: 0.95, metalness: 0.0 };
-  if (m.includes("suede")) return { roughness: 1.0, metalness: 0.0 };
-  return { roughness: 0.6, metalness: 0.05 };
-}
+// The cached parametric-mesh service (CadQuery) lives behind the Nexus runtime tunnel; it
+// serves named-part GLBs CORS-enabled so we can load + recolor them cross-origin.
+const RUNTIME = (process.env.NEXT_PUBLIC_RUNTIME_URL || "https://runtime.nexusaiholdings.com").replace(/\/$/, "");
+const COMPANY = process.env.NEXT_PUBLIC_COMPANY_SLUG || "solework";
 
 interface PriceBreakdown {
   materialName: string;
@@ -79,148 +70,18 @@ interface Props {
   colorways: ShoeColorway[];
 }
 
-function ShoePreview2D({
-  silhouette,
-  colorway,
-  soleProfile,
-  toeShape,
-}: {
-  silhouette: ShoeSilhouette | undefined;
-  colorway: ShoeColorway | undefined;
-  soleProfile: SoleProfile;
-  toeShape: ToeShape;
-}): React.ReactElement {
-  const primary = colorway?.hexPrimary ?? "#cbd5e1";
-  const secondary = colorway?.hexSecondary ?? "#94a3b8";
-
-  // Sole geometry by profile: outsole thickness + rear heel lift (px, in the
-  // 0..200 viewBox). A recognizable side-profile sneaker is drawn as SVG and
-  // recolored from the selected colorway, rather than abstract boxes.
-  const soleGeo: Record<SoleProfile, { sole: number; heel: number }> = {
-    flat: { sole: 14, heel: 2 },
-    wedge: { sole: 14, heel: 20 },
-    block_heel: { sole: 12, heel: 34 },
-    stiletto: { sole: 8, heel: 50 },
-    platform: { sole: 30, heel: 6 },
-    sport: { sole: 16, heel: 4 },
-  };
-  const { sole, heel } = soleGeo[soleProfile] ?? { sole: 16, heel: 4 };
-
-  const baseY = 176; // ground line in the viewBox
-  const soleTopFront = baseY - sole; // outsole top near the toe
-  const ub = soleTopFront - 2; // upper sits just above the sole
-
-  // Toe termination (front of the upper) by toe shape.
-  const toeTip =
-    toeShape === "pointed"
-      ? `Q330 ${ub - 14} 326 ${ub} Q322 ${ub + 1} 306 ${ub}`
-      : toeShape === "square"
-      ? `L312 ${ub - 24} L312 ${ub} L306 ${ub}`
-      : toeShape === "open"
-      ? `Q318 ${ub - 18} 304 ${ub - 7} L290 ${ub}`
-      : `Q322 ${ub - 20} 314 ${ub - 6} Q310 ${ub} 298 ${ub}`; // round
-
-  return (
-    <div style={{ width: "100%", maxWidth: "360px", margin: "0 auto" }}>
-      <svg
-        viewBox="0 0 360 200"
-        role="img"
-        aria-label={`Shoe preview: ${silhouette?.name ?? "silhouette"} in ${colorway?.name ?? "colorway"}`}
-        style={{ width: "100%", height: "auto", display: "block" }}
-      >
-        {/* rear heel lift wedge for heeled profiles */}
-        {heel > 6 && (
-          <path
-            d={`M76 ${baseY} L76 ${baseY - heel} Q126 ${baseY - heel} 156 ${soleTopFront} L156 ${baseY} Z`}
-            fill={secondary}
-          />
-        )}
-        {/* outsole */}
-        <path
-          d={`M62 ${baseY} Q46 ${baseY} 48 ${baseY - sole} L304 ${soleTopFront - 2} Q344 ${soleTopFront - 4} 340 ${soleTopFront + sole - 6} Q338 ${baseY} 316 ${baseY} Z`}
-          fill={secondary}
-        />
-        {/* midsole highlight */}
-        <path
-          d={`M64 ${baseY - sole + 3} L324 ${soleTopFront + 1}`}
-          stroke="#ffffff"
-          strokeOpacity="0.55"
-          strokeWidth="3"
-          fill="none"
-          strokeLinecap="round"
-        />
-        {/* upper */}
-        <path
-          d={`M64 ${ub}
-              L62 ${ub - 58}
-              Q62 ${ub - 74} 84 ${ub - 74}
-              L108 ${ub - 72}
-              Q136 ${ub - 90} 162 ${ub - 64}
-              L190 ${ub - 40}
-              Q248 ${ub - 46} 300 ${ub - 18}
-              ${toeTip}
-              L64 ${ub} Z`}
-          fill={primary}
-        />
-        {/* ankle collar opening */}
-        <ellipse cx="96" cy={ub - 70} rx="22" ry="9" fill={secondary} fillOpacity="0.85" />
-        {/* accent swoosh */}
-        <path
-          d={`M156 ${ub - 6} Q216 ${ub - 30} 296 ${ub - 18}`}
-          stroke={secondary}
-          strokeWidth="9"
-          fill="none"
-          strokeLinecap="round"
-        />
-        {/* laces */}
-        {[0, 1, 2].map((i) => (
-          <line
-            key={i}
-            x1={156 + i * 18}
-            y1={ub - 64 + i * 6}
-            x2={172 + i * 18}
-            y2={ub - 50 + i * 6}
-            stroke="#ffffff"
-            strokeOpacity="0.85"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-        ))}
-      </svg>
-      <p style={{ textAlign: "center", fontSize: "0.8rem", color: "#6b7280", marginTop: "0.5rem" }}>
-        {silhouette?.name ?? "Select a silhouette"} · {colorway?.name ?? "colorway"}
-      </p>
-    </div>
-  );
+// 3D-print material → PBR surface response (matte flexible TPU vs sheen-ier rigid PLA+).
+function materialPbr(materialType: string | undefined): { roughness: number; metalness: number } {
+  const m = (materialType || "").toLowerCase();
+  if (m.includes("tpu")) return { roughness: 0.9, metalness: 0.0 };
+  if (m.includes("nylon")) return { roughness: 0.72, metalness: 0.05 };
+  if (m.includes("pla")) return { roughness: 0.45, metalness: 0.08 };
+  if (m.includes("petg")) return { roughness: 0.55, metalness: 0.06 };
+  if (m.includes("resin")) return { roughness: 0.35, metalness: 0.05 };
+  return { roughness: 0.6, metalness: 0.05 };
 }
 
-// ── Real 3D preview (generative-3d-rendering-001) ──────────────────────────────
-// Loads the silhouette's GLTF mesh (shoe_silhouettes.mesh_url) and tints it with the
-// selected colorway. If the mesh isn't generated yet (mesh_url 404 / absent), the
-// ErrorBoundary falls back to the 2D SVG preview — the studio never breaks.
-type PreviewProps = {
-  silhouette: ShoeSilhouette | undefined;
-  colorway: ShoeColorway | undefined;
-  soleProfile: SoleProfile;
-  toeShape: ToeShape;
-};
-
-class PreviewErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
-  constructor(props: { fallback: ReactNode; children: ReactNode }) {
-    super(props);
-    this.state = { failed: false };
-  }
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch() {
-    /* swallow — fall back to the 2D preview */
-  }
-  render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
-
+// ── Real 3D preview: load the per-config CAD GLB and recolor each named part ──────────
 function Shoe3DModel({
   meshUrl,
   primary,
@@ -235,66 +96,85 @@ function Shoe3DModel({
   const { scene } = useGLTF(meshUrl);
   const cloned = useMemo(() => {
     const c = scene.clone(true);
-    // The generated mesh is a single baked part with one default material, so we can't
-    // two-tone it. Solework colorways are "White / <accent>" (primary is uniformly white),
-    // so the accent (secondary) is what makes a colorway distinct — blend toward it so
-    // selecting a colorway actually changes the preview (instead of every shoe rendering white).
-    const tint = new Color(primary).lerp(new Color(secondary), 0.72);
+    const upperColor = new Color(primary);
+    const soleColor = new Color(secondary);
     const { roughness, metalness } = materialPbr(materialType);
     c.traverse((o: unknown) => {
       const mesh = o as {
         isMesh?: boolean;
+        name?: string;
+        parent?: { name?: string };
         material?: { clone: () => unknown } & Record<string, unknown>;
       };
-      if (mesh.isMesh && mesh.material) {
-        const m = mesh.material.clone() as Record<string, unknown> & {
-          color?: { copy: (c: Color) => void };
-        };
-        if (m.color) m.color.copy(tint);
-        if ("roughness" in m) (m as { roughness: number }).roughness = roughness;
-        if ("metalness" in m) (m as { metalness: number }).metalness = metalness;
-        (mesh as { material: unknown }).material = m;
-      }
+      if (!mesh.isMesh || !mesh.material) return;
+      const part = (mesh.name || mesh.parent?.name || "").toLowerCase();
+      // two-tone: upper takes the primary colour, sole + toe-cap take the accent.
+      const tint = part.includes("upper") ? upperColor : soleColor;
+      const m = mesh.material.clone() as Record<string, unknown> & { color?: { copy: (c: Color) => void } };
+      if (m.color) m.color.copy(tint);
+      if ("roughness" in m) (m as { roughness: number }).roughness = roughness;
+      if ("metalness" in m) (m as { metalness: number }).metalness = metalness;
+      (mesh as { material: unknown }).material = m;
     });
     return c;
   }, [scene, primary, secondary, materialType]);
   return <primitive object={cloned} />;
 }
 
-function ShoePreview(props: PreviewProps): React.ReactElement {
-  const meshUrl = props.silhouette?.meshUrl;
-  const primary = props.colorway?.hexPrimary ?? "#cbd5e1";
-  const secondary = props.colorway?.hexSecondary ?? "#94a3b8";
-  const twoD = <ShoePreview2D {...props} />;
-  // No mesh URL → 2D schematic is the whole preview (it already reflects every attribute).
-  if (!meshUrl) return twoD;
-  // Mesh present → 3D hero (silhouette + colorway + material) PLUS the 2D technical
-  // schematic, which is where sole-profile + toe-shape changes are shown (the baked
-  // mesh can't reshape its sole/toe). Selecting any attribute changes one of the two views.
+class PreviewErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  constructor(props: { fallback: ReactNode; children: ReactNode }) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    /* swallow — show the message fallback */
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function PreviewMessage({ text }: { text: string }): React.ReactElement {
   return (
-    <div>
-      <div style={{ width: "100%", maxWidth: 360, margin: "0 auto", height: 240 }}>
-        <PreviewErrorBoundary fallback={twoD}>
-          <Suspense fallback={twoD}>
-            <Canvas camera={{ position: [0, 0.4, 2.6], fov: 40 }} dpr={[1, 2]}>
-              <ambientLight intensity={0.8} />
-              <directionalLight position={[3, 5, 3]} intensity={1.0} />
-              <directionalLight position={[-3, 2, -2]} intensity={0.4} />
-              <Center>
-                <Shoe3DModel meshUrl={meshUrl} primary={primary} secondary={secondary} materialType={props.colorway?.materialType} />
-              </Center>
-              <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.0} />
-            </Canvas>
-          </Suspense>
-        </PreviewErrorBoundary>
-      </div>
-      {/* Technical view — reflects sole profile + toe shape (and the two-tone colorway) */}
-      <div style={{ marginTop: "0.75rem", borderTop: "1px dashed #e5e7eb", paddingTop: "0.75rem" }}>
-        <p className="muted" style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em", margin: "0 0 0.4rem" }}>
-          Technical view · {props.soleProfile.replace("_", " ")} sole · {props.toeShape} toe
-        </p>
-        {twoD}
-      </div>
+    <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <p className="muted" style={{ fontSize: "0.85rem" }}>{text}</p>
+    </div>
+  );
+}
+
+function ShoePreview({
+  meshUrl,
+  loading,
+  colorway,
+}: {
+  meshUrl: string | null;
+  loading: boolean;
+  colorway: ShoeColorway | undefined;
+}): React.ReactElement {
+  const primary = colorway?.hexPrimary ?? "#ffffff";
+  const secondary = colorway?.hexSecondary ?? "#94a3b8";
+  if (!meshUrl) return <PreviewMessage text={loading ? "Building your shoe…" : "Configure your shoe to preview it in 3D."} />;
+  return (
+    <div style={{ position: "relative", width: "100%", height: 300 }}>
+      <PreviewErrorBoundary fallback={<PreviewMessage text="3D preview unavailable — your design is still saved." />}>
+        <Suspense fallback={<PreviewMessage text="Building your shoe…" />}>
+          <Canvas camera={{ position: [0, 0.5, 2.7], fov: 40 }} dpr={[1, 2]}>
+            <ambientLight intensity={0.85} />
+            <directionalLight position={[3, 5, 3]} intensity={1.05} />
+            <directionalLight position={[-3, 2, -2]} intensity={0.45} />
+            <Center key={meshUrl}>
+              <Shoe3DModel meshUrl={meshUrl} primary={primary} secondary={secondary} materialType={colorway?.materialType} />
+            </Center>
+            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.1} />
+          </Canvas>
+        </Suspense>
+      </PreviewErrorBoundary>
+      {loading && (
+        <span style={{ position: "absolute", top: 8, right: 10, fontSize: "0.7rem", color: "#6b7280" }}>updating…</span>
+      )}
     </div>
   );
 }
@@ -320,8 +200,49 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
 
+  // live parametric mesh (regenerated server-side when the geometry params change)
+  const [meshUrl, setMeshUrl] = useState<string | null>(null);
+  const [meshLoading, setMeshLoading] = useState(false);
+  const [liveChecks, setLiveChecks] = useState<ValidationResult | null>(null);
+
   const activeSilhouette = silhouettes.find((s) => s.id === design.silhouetteId);
   const activeColorway = colorways.find((c) => c.id === design.colorwayId);
+
+  // ── fetch the per-config mesh (geometry depends on sole/toe/size; colour is client-side) ──
+  const reqSeq = useRef(0);
+  useEffect(() => {
+    if (!activeSilhouette) return;
+    const seq = ++reqSeq.current;
+    setMeshLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${RUNTIME}/parametric/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            company: COMPANY,
+            silhouette: activeSilhouette.name,
+            sole_profile: design.soleProfile,
+            toe_shape: design.toeShape,
+            us_size: design.usSize,
+            material_type: activeColorway?.materialType,
+          }),
+        });
+        if (seq !== reqSeq.current) return; // a newer request superseded this one
+        if (res.ok) {
+          const data = (await res.json()) as { meshUrl: string; checks?: ValidationResult };
+          setMeshUrl(data.meshUrl);
+          if (data.checks) setLiveChecks(data.checks);
+        }
+      } catch {
+        /* keep the previous mesh on a transient failure */
+      } finally {
+        if (seq === reqSeq.current) setMeshLoading(false);
+      }
+    }, 320);
+    return () => clearTimeout(t);
+    // colour/material don't change geometry, but material affects printability checks
+  }, [activeSilhouette, design.soleProfile, design.toeShape, design.usSize, activeColorway?.materialType]);
 
   const fetchPrice = useCallback(async (silhouetteId: string, colorwayId: string) => {
     if (!silhouetteId || !colorwayId) return;
@@ -332,12 +253,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ silhouetteId, colorwayId }),
       });
-      if (res.ok) {
-        const data = (await res.json()) as PriceBreakdown;
-        setPriceBreakdown(data);
-      } else {
-        setPriceBreakdown(null);
-      }
+      setPriceBreakdown(res.ok ? ((await res.json()) as PriceBreakdown) : null);
     } catch {
       setPriceBreakdown(null);
     } finally {
@@ -346,9 +262,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
   }, []);
 
   useEffect(() => {
-    if (design.silhouetteId && design.colorwayId) {
-      void fetchPrice(design.silhouetteId, design.colorwayId);
-    }
+    if (design.silhouetteId && design.colorwayId) void fetchPrice(design.silhouetteId, design.colorwayId);
   }, [design.silhouetteId, design.colorwayId, fetchPrice]);
 
   const handleChange = useCallback(
@@ -375,8 +289,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
           us_size: design.usSize,
         }),
       });
-      const data = (await res.json()) as ValidationResult;
-      setValidation(data);
+      setValidation((await res.json()) as ValidationResult);
       setPhase("validated");
     } catch {
       setErrorMsg("Validation request failed — please try again.");
@@ -407,8 +320,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
         const err = (await res.json()) as { error?: string };
         throw new Error(err.error ?? "Save failed");
       }
-      const data = (await res.json()) as SaveResult;
-      setSavedSession(data);
+      setSavedSession((await res.json()) as SaveResult);
       setPhase("saved");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Save failed — please try again.");
@@ -417,19 +329,15 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
   }, [design]);
 
   const isReady = design.silhouetteId && design.colorwayId;
+  const printable = liveChecks?.valid ?? true;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "start" }}>
-      {/* Left: preview panel */}
+      {/* Left: live 3D preview panel */}
       <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Preview</h2>
-        <ShoePreview
-          silhouette={activeSilhouette}
-          colorway={activeColorway}
-          soleProfile={design.soleProfile}
-          toeShape={design.toeShape}
-        />
-        <div style={{ marginTop: "1.25rem", fontSize: "0.875rem" }}>
+        <ShoePreview meshUrl={meshUrl} loading={meshLoading} colorway={activeColorway} />
+        <div style={{ marginTop: "1rem", fontSize: "0.875rem" }}>
           <p style={{ margin: "0.25rem 0" }}>
             <strong>{activeSilhouette?.name ?? "—"}</strong>
           </p>
@@ -440,27 +348,23 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
             {design.soleProfile.replace("_", " ")} sole · {design.toeShape} toe · US {design.usSize}
           </p>
           {activeColorway && (
-            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginTop: "0.75rem" }}>
-              <div
-                title={`Primary: ${activeColorway.hexPrimary}`}
-                style={{ width: 24, height: 24, borderRadius: "50%", background: activeColorway.hexPrimary, border: "2px solid #e5e7eb" }}
-              />
-              <div
-                title={`Secondary: ${activeColorway.hexSecondary}`}
-                style={{ width: 24, height: 24, borderRadius: "50%", background: activeColorway.hexSecondary, border: "2px solid #e5e7eb" }}
-              />
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginTop: "0.5rem" }}>
+              <div title={`Upper: ${activeColorway.hexPrimary}`} style={{ width: 24, height: 24, borderRadius: "50%", background: activeColorway.hexPrimary, border: "2px solid #e5e7eb" }} />
+              <div title={`Sole: ${activeColorway.hexSecondary}`} style={{ width: 24, height: 24, borderRadius: "50%", background: activeColorway.hexSecondary, border: "2px solid #e5e7eb" }} />
             </div>
           )}
+          {liveChecks && !printable && (
+            <p style={{ margin: "0.6rem 0 0", fontSize: "0.78rem", color: "#b45309" }}>
+              ⚠ Not printable as configured: {liveChecks.rejection_reason}
+            </p>
+          )}
 
-          {/* Estimated price panel */}
           <div style={{ marginTop: "1rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
             {priceLoading ? (
               <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>Computing price…</p>
             ) : priceBreakdown ? (
-              <div style={{ textAlign: "center" }}>
-                <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", color: "#6b7280" }}>
-                  Estimated price
-                </p>
+              <div>
+                <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", color: "#6b7280" }}>Estimated price</p>
                 <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: "#1d4ed8" }}>
                   {formatCents(priceBreakdown.sellPriceCents)}
                 </p>
@@ -474,22 +378,9 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
           </div>
         </div>
 
-        {/* Validation / save feedback */}
-        {phase === "validating" && (
-          <p className="muted" style={{ marginTop: "1rem" }}>Checking printability…</p>
-        )}
+        {phase === "validating" && <p className="muted" style={{ marginTop: "1rem" }}>Checking printability…</p>}
         {phase === "validated" && validation && (
-          <div
-            style={{
-              marginTop: "1rem",
-              padding: "0.75rem",
-              borderRadius: "0.5rem",
-              background: validation.valid ? "#f0fdf4" : "#fef2f2",
-              color: validation.valid ? "#15803d" : "#dc2626",
-              fontSize: "0.875rem",
-              textAlign: "left",
-            }}
-          >
+          <div style={{ marginTop: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: validation.valid ? "#f0fdf4" : "#fef2f2", color: validation.valid ? "#15803d" : "#dc2626", fontSize: "0.875rem", textAlign: "left" }}>
             {validation.valid ? (
               <>
                 <strong>Design is printable ✓</strong>
@@ -507,28 +398,14 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
             )}
           </div>
         )}
-        {phase === "saving" && (
-          <p className="muted" style={{ marginTop: "1rem" }}>Saving your design…</p>
-        )}
+        {phase === "saving" && <p className="muted" style={{ marginTop: "1rem" }}>Saving your design…</p>}
         {phase === "saved" && savedSession && (
-          <div
-            style={{
-              marginTop: "1rem",
-              padding: "0.75rem",
-              borderRadius: "0.5rem",
-              background: "#eff6ff",
-              color: "#1d4ed8",
-              fontSize: "0.875rem",
-              textAlign: "left",
-            }}
-          >
+          <div style={{ marginTop: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: "#eff6ff", color: "#1d4ed8", fontSize: "0.875rem", textAlign: "left" }}>
             <strong>Design saved!</strong>
             <p style={{ margin: "0.4rem 0 0" }}>
               Session ID: <code style={{ fontSize: "0.75rem" }}>{savedSession.id}</code>
             </p>
-            <a href="/orders" className="btn" style={{ display: "inline-block", marginTop: "0.5rem" }}>
-              View my orders →
-            </a>
+            <a href="/orders" className="btn" style={{ display: "inline-block", marginTop: "0.5rem" }}>View my orders →</a>
           </div>
         )}
         {phase === "error" && errorMsg && (
@@ -545,37 +422,19 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
         ) : (
           <>
             <div style={{ marginBottom: "1.25rem" }}>
-              <label htmlFor="silhouette" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>
-                Silhouette
-              </label>
-              <select
-                id="silhouette"
-                value={design.silhouetteId}
-                onChange={(e) => handleChange("silhouetteId", e.target.value)}
-                style={{ width: "100%" }}
-              >
+              <label htmlFor="silhouette" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>Silhouette</label>
+              <select id="silhouette" value={design.silhouetteId} onChange={(e) => handleChange("silhouetteId", e.target.value)} style={{ width: "100%" }}>
                 {silhouettes.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}{!s.complianceCertified ? " (not certified)" : ""}
-                  </option>
+                  <option key={s.id} value={s.id}>{s.name}{!s.complianceCertified ? " (not certified)" : ""}</option>
                 ))}
               </select>
             </div>
 
             <div style={{ marginBottom: "1.25rem" }}>
-              <label htmlFor="colorway" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>
-                Colorway &amp; Material
-              </label>
-              <select
-                id="colorway"
-                value={design.colorwayId}
-                onChange={(e) => handleChange("colorwayId", e.target.value)}
-                style={{ width: "100%" }}
-              >
+              <label htmlFor="colorway" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>Colorway &amp; Material</label>
+              <select id="colorway" value={design.colorwayId} onChange={(e) => handleChange("colorwayId", e.target.value)} style={{ width: "100%" }}>
                 {colorways.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} — {c.materialType}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name} — {c.materialType}</option>
                 ))}
               </select>
             </div>
@@ -584,15 +443,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
               <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>Sole Profile</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
                 {SOLE_PROFILES.map((sp) => (
-                  <button
-                    key={sp.value}
-                    type="button"
-                    onClick={() => handleChange("soleProfile", sp.value)}
-                    className={design.soleProfile === sp.value ? "btn" : "btn secondary"}
-                    style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}
-                  >
-                    {sp.label}
-                  </button>
+                  <button key={sp.value} type="button" onClick={() => handleChange("soleProfile", sp.value)} className={design.soleProfile === sp.value ? "btn" : "btn secondary"} style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}>{sp.label}</button>
                 ))}
               </div>
             </div>
@@ -601,59 +452,21 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
               <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>Toe Shape</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
                 {TOE_SHAPES.map((ts) => (
-                  <button
-                    key={ts.value}
-                    type="button"
-                    onClick={() => handleChange("toeShape", ts.value)}
-                    className={design.toeShape === ts.value ? "btn" : "btn secondary"}
-                    style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}
-                  >
-                    {ts.label}
-                  </button>
+                  <button key={ts.value} type="button" onClick={() => handleChange("toeShape", ts.value)} className={design.toeShape === ts.value ? "btn" : "btn secondary"} style={{ fontSize: "0.8rem", padding: "0.4rem 0.25rem" }}>{ts.label}</button>
                 ))}
               </div>
             </div>
 
             <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="us-size" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>
-                US Size — {design.usSize}
-              </label>
-              <select
-                id="us-size"
-                value={design.usSize}
-                onChange={(e) => handleChange("usSize", parseFloat(e.target.value))}
-                style={{ width: "100%" }}
-              >
-                {US_SIZES.map((sz) => (
-                  <option key={sz} value={sz}>
-                    US {sz}
-                  </option>
-                ))}
+              <label htmlFor="us-size" style={{ fontWeight: 600, display: "block", marginBottom: "0.4rem" }}>US Size — {design.usSize}</label>
+              <select id="us-size" value={design.usSize} onChange={(e) => handleChange("usSize", parseFloat(e.target.value))} style={{ width: "100%" }}>
+                {US_SIZES.map((sz) => (<option key={sz} value={sz}>US {sz}</option>))}
               </select>
             </div>
 
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={handleValidate}
-                disabled={!isReady || phase === "validating" || phase === "saving"}
-              >
-                Check printability
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={handleSave}
-                disabled={
-                  !isReady ||
-                  phase === "validating" ||
-                  phase === "saving" ||
-                  (phase === "validated" && validation !== null && !validation.valid)
-                }
-              >
-                Save design
-              </button>
+              <button type="button" className="btn secondary" onClick={handleValidate} disabled={!isReady || phase === "validating" || phase === "saving"}>Check printability</button>
+              <button type="button" className="btn" onClick={handleSave} disabled={!isReady || phase === "validating" || phase === "saving" || (phase === "validated" && validation !== null && !validation.valid)}>Save design</button>
             </div>
             <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
               Saving creates a design session. You can then request a print from your orders page.
