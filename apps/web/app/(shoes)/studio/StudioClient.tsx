@@ -202,6 +202,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
 
   // live parametric mesh (regenerated server-side when the geometry params change)
   const [meshUrl, setMeshUrl] = useState<string | null>(null);
+  const [printUrl, setPrintUrl] = useState<string | null>(null);
   const [meshLoading, setMeshLoading] = useState(false);
   const [liveChecks, setLiveChecks] = useState<ValidationResult | null>(null);
 
@@ -230,8 +231,9 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
         });
         if (seq !== reqSeq.current) return; // a newer request superseded this one
         if (res.ok) {
-          const data = (await res.json()) as { meshUrl: string; checks?: ValidationResult };
+          const data = (await res.json()) as { meshUrl: string; printUrl?: string | null; checks?: ValidationResult };
           setMeshUrl(data.meshUrl);
+          setPrintUrl(data.printUrl ?? null);
           if (data.checks) setLiveChecks(data.checks);
         }
       } catch {
@@ -310,6 +312,7 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
           sole_profile: design.soleProfile,
           toe_shape: design.toeShape,
           us_size: design.usSize,
+          print_mesh_url: printUrl || undefined,  // attach the print-ready CAD artifact
         }),
       });
       if (res.status === 401) {

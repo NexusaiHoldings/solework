@@ -98,6 +98,7 @@ export async function createDesignSession(params: {
   soleProfile: string;
   toeShape: string;
   usSize: number;
+  printMeshUrl?: string | null;
 }): Promise<ShoeDesignSession | null> {
   type Row = {
     id: string;
@@ -115,8 +116,8 @@ export async function createDesignSession(params: {
   try {
     const result = await pool.query<Row>(
       `INSERT INTO shoe_design_sessions
-         (user_id, silhouette_id, colorway_id, sole_profile, toe_shape, us_size)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (user_id, silhouette_id, colorway_id, sole_profile, toe_shape, us_size, print_mesh_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, user_id, silhouette_id, colorway_id, sole_profile,
                  toe_shape, us_size, validation_status, rejection_reason,
                  created_at, updated_at`,
@@ -127,6 +128,7 @@ export async function createDesignSession(params: {
         params.soleProfile,
         params.toeShape,
         params.usSize,
+        params.printMeshUrl ?? null,
       ]
     );
     if (!result.rows[0]) return null;
