@@ -3,7 +3,22 @@
 import { useState, useCallback, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { useGLTF, OrbitControls, Center } from "@react-three/drei";
+import { Color } from "three";
 import type { ShoeSilhouette, ShoeColorway } from "@/lib/shoes/design-sessions";
+
+// 3D-print material → PBR surface response. Lets the colorway's material_type
+// visibly change the 3D preview (matte flexible TPU vs sheen-ier rigid PLA+),
+// even though the generated mesh ships with a single default material.
+function materialPbr(materialType: string | undefined): { roughness: number; metalness: number } {
+  const m = (materialType || "").toLowerCase();
+  if (m.includes("tpu")) return { roughness: 0.9, metalness: 0.0 }; // flexible, matte rubber
+  if (m.includes("nylon")) return { roughness: 0.72, metalness: 0.05 }; // matte technical powder
+  if (m.includes("pla")) return { roughness: 0.45, metalness: 0.08 }; // rigid, slight sheen
+  if (m.includes("leather")) return { roughness: 0.5, metalness: 0.05 };
+  if (m.includes("canvas") || m.includes("mesh")) return { roughness: 0.95, metalness: 0.0 };
+  if (m.includes("suede")) return { roughness: 1.0, metalness: 0.0 };
+  return { roughness: 0.6, metalness: 0.05 };
+}
 
 interface PriceBreakdown {
   materialName: string;
@@ -206,44 +221,80 @@ class PreviewErrorBoundary extends Component<{ fallback: ReactNode; children: Re
   }
 }
 
-function Shoe3DModel({ meshUrl, primary }: { meshUrl: string; primary: string }): React.ReactElement {
+function Shoe3DModel({
+  meshUrl,
+  primary,
+  secondary,
+  materialType,
+}: {
+  meshUrl: string;
+  primary: string;
+  secondary: string;
+  materialType: string | undefined;
+}): React.ReactElement {
   const { scene } = useGLTF(meshUrl);
   const cloned = useMemo(() => {
     const c = scene.clone(true);
+    // The generated mesh is a single baked part with one default material, so we can't
+    // two-tone it. Solework colorways are "White / <accent>" (primary is uniformly white),
+    // so the accent (secondary) is what makes a colorway distinct — blend toward it so
+    // selecting a colorway actually changes the preview (instead of every shoe rendering white).
+    const tint = new Color(primary).lerp(new Color(secondary), 0.72);
+    const { roughness, metalness } = materialPbr(materialType);
     c.traverse((o: unknown) => {
-      const mesh = o as { isMesh?: boolean; material?: { clone: () => unknown; color?: { set: (h: string) => void } } };
+      const mesh = o as {
+        isMesh?: boolean;
+        material?: { clone: () => unknown } & Record<string, unknown>;
+      };
       if (mesh.isMesh && mesh.material) {
-        const m = mesh.material.clone() as { color?: { set: (h: string) => void } };
-        if (m.color) m.color.set(primary);
+        const m = mesh.material.clone() as Record<string, unknown> & {
+          color?: { copy: (c: Color) => void };
+        };
+        if (m.color) m.color.copy(tint);
+        if ("roughness" in m) (m as { roughness: number }).roughness = roughness;
+        if ("metalness" in m) (m as { metalness: number }).metalness = metalness;
         (mesh as { material: unknown }).material = m;
       }
     });
     return c;
-  }, [scene, primary]);
+  }, [scene, primary, secondary, materialType]);
   return <primitive object={cloned} />;
 }
 
 function ShoePreview(props: PreviewProps): React.ReactElement {
   const meshUrl = props.silhouette?.meshUrl;
   const primary = props.colorway?.hexPrimary ?? "#cbd5e1";
-  const fallback = <ShoePreview2D {...props} />;
-  // No mesh URL → don't even mount the Canvas; show the 2D preview.
-  if (!meshUrl) return fallback;
+  const secondary = props.colorway?.hexSecondary ?? "#94a3b8";
+  const twoD = <ShoePreview2D {...props} />;
+  // No mesh URL → 2D schematic is the whole preview (it already reflects every attribute).
+  if (!meshUrl) return twoD;
+  // Mesh present → 3D hero (silhouette + colorway + material) PLUS the 2D technical
+  // schematic, which is where sole-profile + toe-shape changes are shown (the baked
+  // mesh can't reshape its sole/toe). Selecting any attribute changes one of the two views.
   return (
-    <div style={{ width: "100%", maxWidth: 360, margin: "0 auto", height: 240 }}>
-      <PreviewErrorBoundary fallback={fallback}>
-        <Suspense fallback={fallback}>
-          <Canvas camera={{ position: [0, 0.4, 2.6], fov: 40 }} dpr={[1, 2]}>
-            <ambientLight intensity={0.8} />
-            <directionalLight position={[3, 5, 3]} intensity={1.0} />
-            <directionalLight position={[-3, 2, -2]} intensity={0.4} />
-            <Center>
-              <Shoe3DModel meshUrl={meshUrl} primary={primary} />
-            </Center>
-            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.0} />
-          </Canvas>
-        </Suspense>
-      </PreviewErrorBoundary>
+    <div>
+      <div style={{ width: "100%", maxWidth: 360, margin: "0 auto", height: 240 }}>
+        <PreviewErrorBoundary fallback={twoD}>
+          <Suspense fallback={twoD}>
+            <Canvas camera={{ position: [0, 0.4, 2.6], fov: 40 }} dpr={[1, 2]}>
+              <ambientLight intensity={0.8} />
+              <directionalLight position={[3, 5, 3]} intensity={1.0} />
+              <directionalLight position={[-3, 2, -2]} intensity={0.4} />
+              <Center>
+                <Shoe3DModel meshUrl={meshUrl} primary={primary} secondary={secondary} materialType={props.colorway?.materialType} />
+              </Center>
+              <OrbitControls enablePan={false} autoRotate autoRotateSpeed={1.0} />
+            </Canvas>
+          </Suspense>
+        </PreviewErrorBoundary>
+      </div>
+      {/* Technical view — reflects sole profile + toe shape (and the two-tone colorway) */}
+      <div style={{ marginTop: "0.75rem", borderTop: "1px dashed #e5e7eb", paddingTop: "0.75rem" }}>
+        <p className="muted" style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em", margin: "0 0 0.4rem" }}>
+          Technical view · {props.soleProfile.replace("_", " ")} sole · {props.toeShape} toe
+        </p>
+        {twoD}
+      </div>
     </div>
   );
 }
