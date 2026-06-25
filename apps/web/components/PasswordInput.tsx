@@ -66,6 +66,7 @@ export function PasswordInput({
           background: "transparent",
           border: "none",
           borderRadius: 6,
+          boxShadow: "none",  // override main button box-shadow (the faint box)
           cursor: "pointer",
           display: "inline-flex",
           alignItems: "center",
