@@ -24,8 +24,18 @@ CREATE TABLE IF NOT EXISTS shoe_silhouettes (
   mesh_url text NOT NULL,
   is_active boolean NOT NULL DEFAULT true,
   compliance_certified boolean NOT NULL DEFAULT false,
+  -- gender-first configurator (admin/CR): the studio picks gender first, then a silhouette,
+  -- and the allowed sole profiles + toe shapes are constrained per silhouette (sneakers
+  -- exclude stiletto/open/pointed; the women's heel allows them).
+  gender text NOT NULL DEFAULT 'unisex',
+  allowed_sole_profiles text[] NOT NULL DEFAULT '{}',
+  allowed_toe_shapes text[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Backfill the new columns on tables created before this change (idempotent).
+ALTER TABLE shoe_silhouettes ADD COLUMN IF NOT EXISTS gender text NOT NULL DEFAULT 'unisex';
+ALTER TABLE shoe_silhouettes ADD COLUMN IF NOT EXISTS allowed_sole_profiles text[] NOT NULL DEFAULT '{}';
+ALTER TABLE shoe_silhouettes ADD COLUMN IF NOT EXISTS allowed_toe_shapes text[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS shoe_colorways (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -132,6 +142,30 @@ INSERT INTO shoe_silhouettes (id, name, mesh_url, is_active, compliance_certifie
   ('a0000001-0000-0000-0000-000000000002', 'Canvas Low',    '/meshes/canvas-low.glb',    true, true),
   ('a0000001-0000-0000-0000-000000000003', 'City Walker',   '/meshes/city-walker.glb',   true, true)
 ON CONFLICT (id) DO NOTHING;
+
+-- Women's silhouettes (idempotent by name; live rows use random ids, so guard on name
+-- rather than id to avoid duplicate inserts). Women's Court = same as the sneakers;
+-- Women's Heel = open-toe + heel capable.
+INSERT INTO shoe_silhouettes (id, name, mesh_url, is_active, compliance_certified, gender, allowed_sole_profiles, allowed_toe_shapes)
+SELECT gen_random_uuid(), 'Women''s Court', '', true, true, 'womens',
+       ARRAY['flat','sport','platform','wedge'], ARRAY['round','square']
+WHERE NOT EXISTS (SELECT 1 FROM shoe_silhouettes WHERE name = 'Women''s Court');
+INSERT INTO shoe_silhouettes (id, name, mesh_url, is_active, compliance_certified, gender, allowed_sole_profiles, allowed_toe_shapes)
+SELECT gen_random_uuid(), 'Women''s Heel', '', true, true, 'womens',
+       ARRAY['flat','wedge','block_heel','stiletto','platform'], ARRAY['round','pointed','open']
+WHERE NOT EXISTS (SELECT 1 FROM shoe_silhouettes WHERE name = 'Women''s Heel');
+
+-- Backfill gender + allowed options on the canonical silhouettes (idempotent; converges
+-- existing rows that the ON CONFLICT DO NOTHING seed skipped). Sneakers exclude stiletto/open/pointed.
+UPDATE shoe_silhouettes SET gender='mens',
+       allowed_sole_profiles=ARRAY['flat','sport','platform','wedge'], allowed_toe_shapes=ARRAY['round','square']
+ WHERE name IN ('Court Classic','Canvas Low','City Walker');
+UPDATE shoe_silhouettes SET gender='womens',
+       allowed_sole_profiles=ARRAY['flat','sport','platform','wedge'], allowed_toe_shapes=ARRAY['round','square']
+ WHERE name = 'Women''s Court';
+UPDATE shoe_silhouettes SET gender='womens',
+       allowed_sole_profiles=ARRAY['flat','wedge','block_heel','stiletto','platform'], allowed_toe_shapes=ARRAY['round','pointed','open']
+ WHERE name = 'Women''s Heel';
 
 INSERT INTO shoe_colorways (id, name, hex_primary, hex_secondary, material_type) VALUES
   ('b0000001-0000-0000-0000-000000000001', 'White / Natural',       '#FFFFFF', '#F5F0E8', 'TPU'),
