@@ -61,6 +61,7 @@ interface ValidationResult {
 interface SaveResult {
   id: string;
   status: "pending" | "valid" | "rejected";
+  orderId?: string | null;
 }
 
 interface Props {
@@ -336,8 +337,12 @@ export default function StudioClient({ silhouettes, colorways }: Props): React.R
         {phase === "saving" && <p className="muted" style={{ marginTop: "1rem" }}>Saving your design…</p>}
         {phase === "saved" && savedSession && (
           <div style={{ marginTop: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: "#eff6ff", color: "#1d4ed8", fontSize: "0.875rem", textAlign: "left" }}>
-            <strong>Design saved!</strong>
-            <p style={{ margin: "0.4rem 0 0" }}>Session ID: <code style={{ fontSize: "0.75rem" }}>{savedSession.id}</code></p>
+            <strong>Design saved — sent to a pending order ✓</strong>
+            <p style={{ margin: "0.4rem 0 0" }}>
+              {savedSession.orderId
+                ? <>Order <code style={{ fontSize: "0.75rem" }}>{savedSession.orderId.slice(0, 8)}</code> is pending review.</>
+                : <>Session <code style={{ fontSize: "0.75rem" }}>{savedSession.id.slice(0, 8)}</code> saved.</>}
+            </p>
             <a href="/orders" className="btn" style={{ display: "inline-block", marginTop: "0.5rem" }}>View my orders →</a>
           </div>
         )}

@@ -8,6 +8,8 @@ import {
   createDesignSession,
   fetchUserDesignSessions,
 } from "@/lib/shoes/design-sessions";
+import { createPrintJob } from "@/lib/shoes/print-jobs";
+import { randomUUID } from "crypto";
 
 async function resolveUserId(): Promise<string | null> {
   const token = cookies().get("session_token")?.value;
@@ -78,8 +80,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Failed to create design session" }, { status: 500 });
   }
 
+  // Saving a design sends it to a PENDING order: create a print job (status 'queued',
+  // ip_clearance 'pending') so the design enters the order pipeline + shows on /orders.
+  // One order per saved design (order_id groups its print job). Best-effort: a failed
+  // order creation must not fail the save — the design is still saved.
+  let orderId: string | null = null;
+  try {
+    const job = await createPrintJob({ designSessionId: session.id, orderId: randomUUID() });
+    orderId = job?.orderId ?? null;
+  } catch {
+    orderId = null;
+  }
+
   return NextResponse.json(
-    { id: session.id, status: session.validationStatus },
+    { id: session.id, status: session.validationStatus, orderId },
     { status: 201, headers: { "Cache-Control": "no-store" } }
   );
 }
