@@ -37,6 +37,7 @@
     "@nexus/developer-surface": "*",
     "@nexus/social-and-engagement": "*",
     "@nexus-substrate/runtime-client": "*",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "@nexus/feedback": "*"
   }
 }
