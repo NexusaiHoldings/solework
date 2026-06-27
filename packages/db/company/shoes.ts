@@ -285,4 +285,10 @@ INSERT INTO shoe_skus (silhouette_id, colorway_id, us_size, name, stock_quantity
   ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f3', 13, 'Golf — JJ M13', 6, 19900, true)
 ON CONFLICT (silhouette_id, colorway_id, us_size) DO NOTHING;
 
+
+-- JJ edition recolored to a WHITE base (converge the swatch on every deploy; the
+-- INSERT above is ON CONFLICT DO NOTHING so it won't change an existing row).
+UPDATE shoe_colorways SET hex_primary='#FFFFFF', hex_secondary='#0F5132'
+ WHERE id='b0000001-0000-0000-0000-0000000000f3';
+
 `;
