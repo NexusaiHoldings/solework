@@ -234,4 +234,38 @@ INSERT INTO shoe_skus (silhouette_id, colorway_id, us_size, name, stock_quantity
   ('a0000001-0000-0000-0000-000000000003','b0000001-0000-0000-0000-000000000004', 12, 'City Walker — White/Clay M12', 6,  17900, true),
   ('a0000001-0000-0000-0000-000000000003','b0000001-0000-0000-0000-000000000004', 13, 'City Walker — White/Clay M13', 5,  17900, true)
 ON CONFLICT (silhouette_id, colorway_id, us_size) DO NOTHING;
+
+-- ── Solework golf line (feedback/golf — men's golf shoe + named editions) ────
+-- Golf silhouette (men's). mesh_url = hosted parametric golf GLB (CORS-served via
+-- the portfolio-runtime /assets host). Idempotent by fixed id.
+INSERT INTO shoe_silhouettes (id, name, mesh_url, is_active, compliance_certified, gender, allowed_sole_profiles, allowed_toe_shapes) VALUES
+  ('a0000001-0000-0000-0000-0000000000f1', 'Golf',
+   'https://runtime.nexusaiholdings.com/assets/bb6c6bfc-1a25-42d3-bc68-8860d28b6702',
+   true, true, 'mens', ARRAY['sport','flat','platform'], ARRAY['round','square'])
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO shoe_silhouette_tiers (silhouette_id, tier_name, price_add_cents) VALUES
+  ('a0000001-0000-0000-0000-0000000000f1', 'premium', 3500)
+ON CONFLICT (silhouette_id) DO NOTHING;
+
+-- Named edition colorways (render colors mapped in portfolio-runtime render.py).
+INSERT INTO shoe_colorways (id, name, hex_primary, hex_secondary, material_type) VALUES
+  ('b0000001-0000-0000-0000-0000000000f1', 'The General', '#4B5320', '#C5A04A', 'TPU'),
+  ('b0000001-0000-0000-0000-0000000000f2', 'Freak',       '#0B0B0F', '#B6FF1A', 'TPU'),
+  ('b0000001-0000-0000-0000-0000000000f3', 'JJ',          '#0F5132', '#0B0B0F', 'Nylon-12')
+ON CONFLICT (id) DO NOTHING;
+
+-- Golf best-seller SKUs (men's sizes) for the three editions.
+INSERT INTO shoe_skus (silhouette_id, colorway_id, us_size, name, stock_quantity, price_cents, is_active) VALUES
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f1', 9,  'Golf — The General M9',  8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f1', 10, 'Golf — The General M10', 8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f1', 11, 'Golf — The General M11', 8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f2', 9,  'Golf — Freak M9',  8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f2', 10, 'Golf — Freak M10', 8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f2', 11, 'Golf — Freak M11', 8, 18900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f3', 9,  'Golf — JJ M9',  8, 19900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f3', 10, 'Golf — JJ M10', 8, 19900, true),
+  ('a0000001-0000-0000-0000-0000000000f1','b0000001-0000-0000-0000-0000000000f3', 11, 'Golf — JJ M11', 8, 19900, true)
+ON CONFLICT (silhouette_id, colorway_id, us_size) DO NOTHING;
+
 `;
