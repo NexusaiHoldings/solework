@@ -30,14 +30,21 @@ export async function fetchShoeSkus(): Promise<ShoeSku[]> {
     colorway: string;
     size: string;
     stock_quantity: number;
-    price: string;
-    image_url: string | null;
+    price_cents: number;
   };
   try {
     const result = await pool.query<Row>(
-      `SELECT id, name, colorway, size, stock_quantity, price, image_url
-       FROM shoe_skus
-       ORDER BY name ASC, colorway ASC, size ASC`
+      `SELECT sk.id,
+              ss.name        AS name,
+              sc.name        AS colorway,
+              sk.us_size::text AS size,
+              sk.stock_quantity,
+              sk.price_cents
+       FROM shoe_skus sk
+       JOIN shoe_silhouettes ss ON ss.id = sk.silhouette_id
+       JOIN shoe_colorways   sc ON sc.id = sk.colorway_id
+       WHERE sk.is_active = true
+       ORDER BY ss.name ASC, sc.name ASC, sk.us_size ASC`
     );
     return result.rows.map((row) => ({
       id: row.id,
@@ -45,8 +52,8 @@ export async function fetchShoeSkus(): Promise<ShoeSku[]> {
       colorway: row.colorway,
       size: row.size,
       stockQuantity: Number(row.stock_quantity),
-      price: parseFloat(row.price),
-      imageUrl: row.image_url,
+      price: row.price_cents / 100,
+      imageUrl: null,
     }));
   } catch {
     // Table may not exist during early provisioning; return empty list.
