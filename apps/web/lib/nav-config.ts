@@ -9,6 +9,8 @@
 export type NavLink = {
   href: string;
   label: string;
+  /** Operator/admin route — TopNav shows it only to admins. */
+  adminOnly?: boolean;
 };
 
 export type NavGroup = {
@@ -24,7 +26,7 @@ export type NavConfig = {
 export const NAV_CONFIG: NavConfig = {
   primary: [
     { href: "/", label: "Home" },
-    { href: "/inventory", label: "Inventory" },
+    { href: "/inventory", label: "Inventory", adminOnly: true },
     { href: "/orders", label: "Orders" },
     { href: "/pricing", label: "Pricing" },
     { href: "/shop", label: "Shop" },
