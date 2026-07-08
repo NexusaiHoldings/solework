@@ -64,6 +64,11 @@ export default function PricingPage(): React.ReactElement {
 
   const [editMaterialId, setEditMaterialId] = useState<string | null>(null);
   const [editMaterialCost, setEditMaterialCost] = useState("");
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
+  const [newMaterialName, setNewMaterialName] = useState("");
+  const [newMaterialSlug, setNewMaterialSlug] = useState("");
+  const [newMaterialCost, setNewMaterialCost] = useState("");
+  const [addMaterialError, setAddMaterialError] = useState("");
   const [editTierId, setEditTierId] = useState<string | null>(null);
   const [editTierName, setEditTierName] = useState("");
   const [editTierPrice, setEditTierPrice] = useState("");
@@ -219,6 +224,56 @@ export default function PricingPage(): React.ReactElement {
     }
   }, [calcSilhouetteId, calcColorwayId]);
 
+  const slugify = (text: string): string =>
+    text
+      .toLowerCase()
+      .replace(/\+/g, "_plus")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  const addMaterial = useCallback(async () => {
+    setAddMaterialError("");
+    const costCents = parseInt(newMaterialCost, 10);
+    if (!newMaterialName.trim()) {
+      setAddMaterialError("Material name is required.");
+      return;
+    }
+    if (!newMaterialSlug.trim() || !/^[a-z0-9_]+$/.test(newMaterialSlug)) {
+      setAddMaterialError("Slug must be lowercase alphanumeric with underscores only.");
+      return;
+    }
+    if (isNaN(costCents) || costCents < 0) {
+      setAddMaterialError("Base cost must be a non-negative number (in cents).");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/shoes/pricing/materials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMaterialName.trim(),
+          slug: newMaterialSlug.trim(),
+          baseCostCents: costCents,
+        }),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { error?: string };
+        throw new Error(d.error ?? "Failed to create material");
+      }
+      setShowAddMaterial(false);
+      setNewMaterialName("");
+      setNewMaterialSlug("");
+      setNewMaterialCost("");
+      flash("Material added.");
+      await loadData();
+    } catch (err) {
+      setAddMaterialError(err instanceof Error ? err.message : "Failed to add material");
+    } finally {
+      setSaving(false);
+    }
+  }, [newMaterialName, newMaterialSlug, newMaterialCost, loadData]);
+
   return (
     <main>
       <h1>Pricing Model</h1>
@@ -244,10 +299,113 @@ export default function PricingPage(): React.ReactElement {
         <>
           {/* Print Materials */}
           <section style={{ marginBottom: "2rem" }}>
-            <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Print Material Base Costs</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.75rem" }}>
+              <h2 style={{ fontSize: "1.1rem", margin: 0 }}>Print Material Base Costs</h2>
+              {!showAddMaterial && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.75rem" }}
+                  onClick={() => {
+                    setShowAddMaterial(true);
+                    setAddMaterialError("");
+                    setNewMaterialName("");
+                    setNewMaterialSlug("");
+                    setNewMaterialCost("");
+                  }}
+                >
+                  + Add Material
+                </button>
+              )}
+            </div>
             <p className="muted" style={{ fontSize: "0.875rem", marginBottom: "1rem" }}>
               Base manufacturing cost per material. Edit and save to update live pricing.
             </p>
+
+            {showAddMaterial && (
+              <div className="card" style={{ padding: "1.25rem", marginBottom: "1.25rem", maxWidth: "560px" }}>
+                <h3 style={{ margin: "0 0 1rem", fontSize: "0.95rem" }}>New Material Data Sheet</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                  <div>
+                    <label htmlFor="new-mat-name" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
+                      Material Name <span style={{ color: "#dc2626" }}>*</span>
+                    </label>
+                    <input
+                      id="new-mat-name"
+                      type="text"
+                      placeholder="e.g. Carbon Fiber"
+                      value={newMaterialName}
+                      maxLength={120}
+                      style={{ width: "100%" }}
+                      onChange={(e) => {
+                        setNewMaterialName(e.target.value);
+                        if (!newMaterialSlug || newMaterialSlug === slugify(newMaterialName)) {
+                          setNewMaterialSlug(slugify(e.target.value));
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="new-mat-slug" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
+                      Slug <span style={{ color: "#dc2626" }}>*</span>
+                      <span className="muted" style={{ fontWeight: 400, marginLeft: "0.4rem" }}>(lowercase, underscores)</span>
+                    </label>
+                    <input
+                      id="new-mat-slug"
+                      type="text"
+                      placeholder="e.g. carbon_fiber"
+                      value={newMaterialSlug}
+                      maxLength={60}
+                      style={{ width: "100%" }}
+                      onChange={(e) => setNewMaterialSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginBottom: "0.75rem", maxWidth: "200px" }}>
+                  <label htmlFor="new-mat-cost" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
+                    Base Cost (cents) <span style={{ color: "#dc2626" }}>*</span>
+                    <span className="muted" style={{ fontWeight: 400, marginLeft: "0.4rem" }}>e.g. 2200 = $22.00</span>
+                  </label>
+                  <input
+                    id="new-mat-cost"
+                    type="number"
+                    min="0"
+                    placeholder="2200"
+                    value={newMaterialCost}
+                    style={{ width: "100%" }}
+                    onChange={(e) => setNewMaterialCost(e.target.value)}
+                  />
+                  {newMaterialCost && !isNaN(parseInt(newMaterialCost, 10)) && (
+                    <p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.25rem" }}>
+                      = {formatCents(parseInt(newMaterialCost, 10))}
+                    </p>
+                  )}
+                </div>
+                {addMaterialError && (
+                  <p style={{ color: "#dc2626", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{addMaterialError}</p>
+                )}
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: "0.8rem" }}
+                    onClick={() => void addMaterial()}
+                    disabled={saving}
+                  >
+                    {saving ? "Saving…" : "Save Material"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    style={{ fontSize: "0.8rem" }}
+                    onClick={() => { setShowAddMaterial(false); setAddMaterialError(""); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {materials.length === 0 ? (
               <div className="empty"><p>No materials configured yet.</p></div>
             ) : (
