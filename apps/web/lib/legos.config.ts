@@ -63,6 +63,26 @@ export const LEGOS: readonly LegoConfig[] = [
   },
   {
     "config": {
+      "tier_ladder": [
+        {
+          "name": "Best-Seller Ready-to-Ship",
+          "price_id": "price_1Tleo86WMeYkDDIubnSPQm9U",
+          "amount": 6500,
+          "interval": "month"
+        },
+        {
+          "name": "Custom Design Studio",
+          "price_id": "price_1Tleo86WMeYkDDIuMCGAZeGT",
+          "amount": 8500,
+          "interval": "month"
+        },
+        {
+          "name": "Design Studio Premium Bundle",
+          "price_id": "price_1Tleo86WMeYkDDIuu0zROyAV",
+          "amount": 11500,
+          "interval": "month"
+        }
+      ],
       "default_currency": "usd",
       "enable_proration": true,
       "trial_days": 0
