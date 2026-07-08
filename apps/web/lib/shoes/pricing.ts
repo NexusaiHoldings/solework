@@ -240,6 +240,33 @@ export async function updateSilhouetteTier(
   }
 }
 
+export async function createMaterial(
+  name: string,
+  slug: string,
+  baseCostCents: number
+): Promise<PrintMaterial | null> {
+  try {
+    const result = await pool.query<MaterialRow>(
+      `INSERT INTO shoe_print_materials (name, slug, base_cost_cents, is_active)
+       VALUES ($1, $2, $3, true)
+       RETURNING id, name, slug, base_cost_cents, is_active, updated_at`,
+      [name, slug, baseCostCents]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      baseCostCents: row.base_cost_cents,
+      isActive: row.is_active,
+      updatedAt: String(row.updated_at),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function updateGlobalMargin(marginBps: number): Promise<boolean> {
   try {
     await pool.query(
